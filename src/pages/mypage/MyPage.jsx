@@ -1,0 +1,238 @@
+import { useEffect, useState } from "react";
+import { apiGet } from "../../api/client.js";
+import { endpoints } from "../../api/endpoints.js";
+import Icon from "../../shared/icons/Icon.jsx";
+import { routeTo } from "../../shared/router/routes.js";
+
+const fallbackUser = {
+  name: "홍길동",
+  email: "test@example.com",
+  role: "USER"
+};
+
+const activitySections = [
+  {
+    id: "nodes",
+    title: "내가 작성한 노드",
+    count: 3,
+    icon: "file",
+    items: [
+      { id: "node-1", title: "정규화 기준", meta: "Database Design · 댓글 6개", route: "/nodes/node-1" },
+      { id: "node-3", title: "인덱스 설계", meta: "Database Design · 댓글 9개", route: "/nodes/node-3" },
+      { id: "node-9", title: "스키마 리뷰", meta: "Backend Guild · 댓글 8개", route: "/nodes/node-9" }
+    ]
+  },
+  {
+    id: "comments",
+    title: "내가 작성한 댓글",
+    count: 2,
+    icon: "bell",
+    items: [
+      { id: "comment-1", title: "트랜잭션 격리 수준 다시 확인 필요", meta: "정규화 기준 · 2h ago", route: "/comments/comment-1" },
+      { id: "comment-2", title: "읽기 모델 분리 기준을 추가하면 좋겠습니다", meta: "읽기 모델 · 1d ago", route: "/comments/comment-2" }
+    ]
+  },
+  {
+    id: "thumbs",
+    title: "추천한 노드",
+    count: 2,
+    icon: "plus",
+    items: [
+      { id: "thumb-1", title: "쿼리 최적화", meta: "Database Design · 추천함", route: "/nodes/node-8" },
+      { id: "thumb-2", title: "ERD 작성", meta: "Backend Guild · 추천함", route: "/nodes/node-13" }
+    ]
+  }
+];
+
+const roleLabel = (role) => ({
+  ADMIN: "관리자",
+  MANAGER: "반장",
+  LEADER: "반장",
+  USER: "일반학생"
+}[role] || "일반학생");
+
+export default function MyPage() {
+  // WAS /user 응답으로 채워지는 사용자 프로필 정보입니다.
+  const [user, setUser] = useState(fallbackUser);
+
+  // 비밀번호 변경 폼 상태입니다. 현재 WAS 변경 API가 없어 화면 검증까지만 처리합니다.
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    nextPassword: "",
+    nextPasswordConfirm: ""
+  });
+  const [status, setStatus] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [activeActivity, setActiveActivity] = useState("nodes");
+
+  const moveTo = (path) => {
+    routeTo(path);
+  };
+
+  const selectedActivity = activitySections.find((section) => section.id === activeActivity) || activitySections[0];
+
+  // 마이페이지 진입 시 로그인된 사용자의 정보를 조회합니다.
+  useEffect(() => {
+    const loadUser = async () => {
+      setIsLoading(true);
+      setStatus("");
+
+      try {
+        const userInfo = await apiGet(endpoints.users.me);
+        if (userInfo) setUser(userInfo);
+      } catch (error) {
+        setStatus("로그인 정보가 없어서 예시 프로필을 표시합니다.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadUser();
+  }, []);
+
+  // 비밀번호 입력값을 관리합니다.
+  const updatePasswordField = (event) => {
+    const { name, value } = event.target;
+    setPasswordForm((current) => ({ ...current, [name]: value }));
+  };
+
+  // 비밀번호 변경 API가 추가되기 전까지는 유효성 검증과 안내 메시지만 처리합니다.
+  const submitPasswordChange = (event) => {
+    event.preventDefault();
+
+    if (!passwordForm.currentPassword || !passwordForm.nextPassword || !passwordForm.nextPasswordConfirm) {
+      setStatus("비밀번호 변경 항목을 모두 입력해주세요.");
+      return;
+    }
+
+    if (passwordForm.nextPassword !== passwordForm.nextPasswordConfirm) {
+      setStatus("변경할 비밀번호가 서로 일치하지 않습니다.");
+      return;
+    }
+
+    setStatus("비밀번호 변경 API가 WAS에 추가되면 이 버튼에 연결됩니다.");
+  };
+
+  return (
+    <main className="mypage-shell" aria-label="My page">
+      {/* 메인 화면과 같은 브랜드 톤을 유지하는 상단 바입니다. */}
+      <header className="mypage-topbar">
+        <button className="mypage-brand" type="button" onClick={() => moveTo("/main")} aria-label="메인으로 이동">
+          <span className="brand-button"><Icon name="brain" /></span>
+          <span>Synapse</span>
+        </button>
+        <nav className="mypage-nav" aria-label="마이페이지 이동">
+          <button type="button" onClick={() => moveTo("/main")}>메인</button>
+          <button className="is-active" type="button">마이페이지</button>
+          <button type="button" onClick={() => moveTo("/login")}>로그인</button>
+        </nav>
+      </header>
+
+      <section className="mypage-content">
+        {/* 사용자 프로필 카드입니다. 사진 대신 일반 user 아이콘을 사용합니다. */}
+        <article className="profile-card" aria-labelledby="profile-heading">
+          <div className="profile-accent" aria-hidden="true" />
+          <div className="profile-avatar" aria-hidden="true">
+            <Icon name="user" className="profile-avatar-icon" />
+          </div>
+          <div className="profile-copy">
+            <p className="profile-kicker">MY PAGE</p>
+            <h1 id="profile-heading">{user.name || fallbackUser.name}</h1>
+            <p className="profile-email">{user.email || fallbackUser.email}</p>
+            <div className="profile-meta">
+              <span>{roleLabel(user.role || fallbackUser.role)}</span>
+              <span>{isLoading ? "불러오는 중" : "프로필 정보"}</span>
+            </div>
+          </div>
+          <button className="profile-settings" type="button" onClick={() => setStatus("프로필 수정 API가 추가되면 연결됩니다.")}>
+            <Icon name="settings" />
+            <span>설정</span>
+          </button>
+        </article>
+
+        <section className="mypage-grid">
+          {/* 내 노드/댓글/추천 활동이 들어가는 영역입니다. 현재 WAS 목록 API가 없어 예시 데이터로 배치합니다. */}
+          <section className="activity-panel" aria-labelledby="activity-heading">
+            <div className="activity-panel-head">
+              <div>
+                <p className="panel-kicker">MY ACTIVITY</p>
+                <h2 id="activity-heading">내 활동</h2>
+              </div>
+              <div className="activity-tabs" role="tablist" aria-label="내 활동 분류">
+                {activitySections.map((section) => (
+                  <button
+                    key={section.id}
+                    className={section.id === activeActivity ? "is-active" : ""}
+                    type="button"
+                    role="tab"
+                    aria-selected={section.id === activeActivity}
+                    onClick={() => setActiveActivity(section.id)}
+                  >
+                    {section.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="activity-summary-row">
+              {activitySections.map((section) => (
+                <button key={section.id} className={`activity-summary-card ${section.id === activeActivity ? "is-active" : ""}`} type="button" onClick={() => setActiveActivity(section.id)}>
+                  <span><Icon name={section.icon} /></span>
+                  <strong>{section.count}</strong>
+                  <small>{section.title}</small>
+                </button>
+              ))}
+            </div>
+
+            <div className="mypage-activity-list">
+              {selectedActivity.items.map((item) => (
+                <button key={item.id} className="mypage-activity-item" type="button" onClick={() => moveTo(item.route)}>
+                  <span className="mypage-activity-icon"><Icon name={selectedActivity.icon} /></span>
+                  <span>
+                    <strong>{item.title}</strong>
+                    <small>{item.meta}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* 비밀번호 변경 기능이 들어갈 위치입니다. 현재는 WAS 엔드포인트 대기 상태입니다. */}
+          <form className="password-panel" onSubmit={submitPasswordChange} aria-labelledby="password-heading">
+            <div>
+              <p className="panel-kicker">SECURITY</p>
+              <h2 id="password-heading">비밀번호 변경</h2>
+            </div>
+            <label>
+              <span>현재 비밀번호</span>
+              <input name="currentPassword" type="password" value={passwordForm.currentPassword} onChange={updatePasswordField} placeholder="현재 비밀번호" />
+            </label>
+            <label>
+              <span>변경할 비밀번호</span>
+              <input name="nextPassword" type="password" value={passwordForm.nextPassword} onChange={updatePasswordField} placeholder="새 비밀번호" />
+            </label>
+            <label>
+              <span>변경할 비밀번호 확인</span>
+              <input name="nextPasswordConfirm" type="password" value={passwordForm.nextPasswordConfirm} onChange={updatePasswordField} placeholder="새 비밀번호 확인" />
+            </label>
+            <button className="password-submit" type="submit">비밀번호 변경</button>
+          </form>
+
+          {/* 계정 권한만 간단히 보여주는 요약 패널입니다. */}
+          <aside className="mypage-side-panel" aria-label="계정 요약">
+            <p className="panel-kicker">ACCOUNT</p>
+            <h2>계정 요약</h2>
+            <dl>
+              <div>
+                <dt>권한</dt>
+                <dd>{roleLabel(user.role || fallbackUser.role)}</dd>
+              </div>
+            </dl>
+          </aside>
+        </section>
+
+        {status && <p className="mypage-status" role="status">{status}</p>}
+      </section>
+    </main>
+  );
+}

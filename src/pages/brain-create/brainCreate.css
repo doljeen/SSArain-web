@@ -1,0 +1,240 @@
+.brain-create-shell {
+  width: 100vw;
+  height: 100vh;
+  overflow: auto;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 48%, #f6f8ff 100%);
+  color: var(--color-ink);
+}
+
+.brain-create-topbar {
+  height: 68px;
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-line);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.brain-create-brand,
+.brain-create-actions {
+  display: inline-flex;
+  align-items: center;
+}
+
+.brain-create-brand {
+  gap: 12px;
+  color: #171c28;
+  font-size: 17px;
+  font-weight: 850;
+}
+
+.brain-create-actions {
+  gap: 10px;
+}
+
+.brain-create-actions button,
+.member-search-row button {
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 10px;
+  background: #f3f6fb;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.brain-create-content {
+  width: min(1000px, calc(100vw - 64px));
+  margin: 86px auto 70px;
+}
+
+.brain-create-form {
+  display: grid;
+  gap: 12px;
+}
+
+.brain-create-heading {
+  margin-bottom: 10px;
+}
+
+.brain-create-heading h1 {
+  margin: 0;
+  color: #171c28;
+  font-size: 34px;
+  line-height: 1.15;
+  font-weight: 900;
+}
+
+.brain-create-form label {
+  display: grid;
+  gap: 8px;
+}
+
+.brain-create-form label span,
+.selected-members strong {
+  color: #526074;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.member-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 210px;
+  gap: 16px;
+  align-items: end;
+}
+
+.brain-name-row {
+  display: block;
+}
+
+.brain-create-form input,
+.brain-create-form textarea {
+  width: 100%;
+  border: 1px solid #dfe7f2;
+  border-radius: 8px;
+  outline: none;
+  background: #f8fafc;
+  color: #171c28;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.brain-create-form input {
+  height: 64px;
+  padding: 0 20px;
+}
+
+.brain-create-form textarea {
+  min-height: 112px;
+  padding: 20px;
+  resize: vertical;
+}
+
+.brain-create-form input:focus,
+.brain-create-form textarea:focus {
+  border-color: var(--color-purple-strong);
+  box-shadow: 0 0 0 4px rgba(101, 87, 255, 0.12);
+}
+
+.member-search-row button {
+  height: 64px;
+}
+
+.selected-members {
+  min-height: 112px;
+  padding: 20px;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.selected-members p {
+  margin: 14px 0 0;
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 740;
+}
+
+.selected-members ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.selected-members li {
+  height: 34px;
+  padding: 0 8px 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: var(--color-purple-strong);
+  font-size: 14px;
+  font-weight: 820;
+}
+
+.selected-members li button {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(101, 87, 255, 0.12);
+  color: var(--color-purple-strong);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.join-policy-toggle {
+  width: 320px;
+  min-height: 58px;
+  padding: 0 18px;
+  display: flex !important;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 12px;
+  border-radius: 8px;
+  background: #f3f6fb;
+}
+
+.join-policy-toggle input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.brain-create-submit {
+  width: 220px;
+  height: 58px;
+  margin-top: 34px;
+  justify-self: end;
+  border-radius: 10px;
+  background: var(--color-purple-strong);
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 880;
+  box-shadow: 0 12px 22px rgba(101, 87, 255, 0.24);
+}
+
+.brain-create-submit:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.brain-create-status {
+  margin: 18px 0 0;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: var(--color-purple-strong);
+  font-size: 14px;
+  font-weight: 760;
+}
+
+@media (max-width: 760px) {
+  .brain-create-topbar {
+    height: auto;
+    padding: 16px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .brain-create-content {
+    width: calc(100vw - 32px);
+    margin-top: 32px;
+  }
+
+  .member-search-row {
+    grid-template-columns: 1fr;
+  }
+
+  .join-policy-toggle,
+  .brain-create-submit {
+    width: 100%;
+  }
+}
