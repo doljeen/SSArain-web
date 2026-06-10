@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { apiGet } from "../../api/client.js";
+import { apiGet, apiPost } from "../../api/client.js";
 import { endpoints } from "../../api/endpoints.js";
 import Icon from "../../shared/icons/Icon.jsx";
 import { routeTo } from "../../shared/router/routes.js";
+
+const AUTH_STATE_KEY = "ssarain-authenticated";
 
 const fallbackUser = {
   name: "홍길동",
@@ -71,6 +73,22 @@ export default function MyPage() {
 
   const selectedActivity = activitySections.find((section) => section.id === activeActivity) || activitySections[0];
 
+  // WAS 로그아웃 후 인증 상태를 지우고 게스트 메인으로 이동합니다.
+  const logout = async () => {
+    setIsLoading(true);
+    setStatus("");
+
+    try {
+      await apiPost(endpoints.auth.logout, {});
+    } catch (error) {
+      // 토큰이 이미 만료되었거나 쿠키가 없어도 프론트 인증 상태는 정리합니다.
+    } finally {
+      sessionStorage.removeItem(AUTH_STATE_KEY);
+      setIsLoading(false);
+      routeTo("/main");
+    }
+  };
+
   // 마이페이지 진입 시 로그인된 사용자의 정보를 조회합니다.
   useEffect(() => {
     const loadUser = async () => {
@@ -79,9 +97,13 @@ export default function MyPage() {
 
       try {
         const userInfo = await apiGet(endpoints.users.me);
-        if (userInfo) setUser(userInfo);
+        if (userInfo) {
+          sessionStorage.setItem(AUTH_STATE_KEY, "true");
+          setUser(userInfo);
+        }
       } catch (error) {
-        setStatus("로그인 정보가 없어서 예시 프로필을 표시합니다.");
+        sessionStorage.removeItem(AUTH_STATE_KEY);
+        routeTo("/login");
       } finally {
         setIsLoading(false);
       }
@@ -124,7 +146,7 @@ export default function MyPage() {
         <nav className="mypage-nav" aria-label="마이페이지 이동">
           <button type="button" onClick={() => moveTo("/main")}>메인</button>
           <button className="is-active" type="button">마이페이지</button>
-          <button type="button" onClick={() => moveTo("/login")}>로그인</button>
+          <button type="button" onClick={logout}>로그아웃</button>
         </nav>
       </header>
 
@@ -144,10 +166,6 @@ export default function MyPage() {
               <span>{isLoading ? "불러오는 중" : "프로필 정보"}</span>
             </div>
           </div>
-          <button className="profile-settings" type="button" onClick={() => setStatus("프로필 수정 API가 추가되면 연결됩니다.")}>
-            <Icon name="settings" />
-            <span>설정</span>
-          </button>
         </article>
 
         <section className="mypage-grid">

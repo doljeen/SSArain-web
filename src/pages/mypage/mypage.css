@@ -154,22 +154,6 @@
   font-weight: 850;
 }
 
-.profile-settings {
-  margin-left: auto;
-  min-width: 90px;
-  height: 44px;
-  padding: 0 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border-radius: 12px;
-  background: #f3f6fb;
-  color: #526074;
-  font-size: 14px;
-  font-weight: 850;
-}
-
 .mypage-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
@@ -468,10 +452,6 @@
     right: 24px;
     top: 36px;
     width: auto;
-  }
-
-  .profile-settings {
-    margin-left: 0;
   }
 
   .mypage-grid,

@@ -23,6 +23,8 @@ const getAuthErrorMessage = (message) => {
   return message;
 };
 
+const AUTH_STATE_KEY = "ssarain-authenticated";
+
 export default function AuthPage({ mode }) {
   // mode가 signup이면 이메일 인증/이름 중복 확인/비밀번호 확인 필드를 추가로 보여줍니다.
   const isSignup = mode === "signup";
@@ -160,7 +162,21 @@ export default function AuthPage({ mode }) {
         : { email: form.email, password: form.password };
 
       await apiPost(endpoint, body);
-      setStatus(isSignup ? "회원가입이 완료되었습니다." : "로그인되었습니다.");
+
+      if (isSignup) {
+        sessionStorage.removeItem(AUTH_STATE_KEY);
+        try {
+          await apiPost(endpoints.auth.logout, {});
+        } catch (error) {
+          // 회원가입 응답에서 쿠키가 내려오지 않은 경우도 있으므로 로그아웃 실패는 무시합니다.
+        }
+        setStatus("회원가입이 완료되었습니다. 로그인 페이지로 이동합니다.");
+        window.setTimeout(() => moveTo("/login"), 350);
+        return;
+      }
+
+      sessionStorage.setItem(AUTH_STATE_KEY, "true");
+      setStatus("로그인되었습니다.");
       window.setTimeout(() => moveTo("/main"), 350);
     } catch (error) {
       setStatus(getAuthErrorMessage(error.message));

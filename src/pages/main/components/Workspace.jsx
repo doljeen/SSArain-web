@@ -12,6 +12,7 @@ export default function Workspace({
   pageData,
   topicClusters,
   view,
+  isAuthenticated,
   onRoute,
   onMoveToTopic,
   onPointerDown,
@@ -42,7 +43,7 @@ export default function Workspace({
             <button className={`view-tab ${view === "synapse" ? "is-active" : ""}`} type="button" role="tab" aria-selected={view === "synapse"} onClick={(event) => { onRoute(event, activeTopic ? `/topics/${activeTopic.id}/synapse` : "/main/synapse"); onSetView("synapse"); }}><Icon name="synapse" /><span>Synapse View</span></button>
             <button className={`view-tab ${view === "posts" ? "is-active" : ""}`} type="button" role="tab" aria-selected={view === "posts"} onClick={(event) => { onRoute(event, activeTopic ? `/topics/${activeTopic.id}/posts` : "/main/posts"); onSetView("posts"); }}><Icon name="list" /><span>Post List</span></button>
           </div>
-          <button className="header-button" type="button" onClick={(event) => onRoute(event, "/mypage")}>마이페이지</button>
+          <button className="header-button" type="button" onClick={(event) => onRoute(event, isAuthenticated ? "/mypage" : "/login")}>{isAuthenticated ? "마이페이지" : "로그인"}</button>
           <button className={`header-button notice-trigger ${isRightPanelOpen ? "is-open" : ""}`} type="button" onClick={(event) => { onRoute(event, "/notifications"); onToggleRight(); }} aria-pressed={isRightPanelOpen}><Icon name="bell" /><span>알림창</span></button>
         </div>
       </header>

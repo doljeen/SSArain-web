@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, apiPost } from "../../api/client.js";
 import { endpoints } from "../../api/endpoints.js";
+import { guestPreview } from "../../data/guestPreview.js";
 import { mainMock } from "../../data/mainMock.js";
 import { getCurrentRoute, routeTo } from "../../shared/router/routes.js";
 import InsightsPanel from "./components/InsightsPanel.jsx";
@@ -12,6 +13,7 @@ import { createModalCopy } from "./config/modalConfig.js";
 import { buildTopicTree, clone, flattenTopics } from "./config/mainUtils.js";
 
 const CREATED_WORKSPACE_KEY = "ssarain-created-workspace";
+const AUTH_STATE_KEY = "ssarain-authenticated";
 
 const getTopicIdFromRoute = (path) => {
   const match = path.match(/^\/topics\/([^/]+)/);
@@ -28,6 +30,7 @@ export default function MainPage() {
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [view, setView] = useState("synapse");
   const [graph, setGraph] = useState({ x: 0, y: 0, scale: 1, tilt: 0 });
+  const [authStatus, setAuthStatus] = useState(() => sessionStorage.getItem(AUTH_STATE_KEY) === "true" ? "authenticated" : "guest");
 
   // 모달, 토스트, API 연결 상태, 그래프 이동 애니메이션 상태입니다.
   const [modal, setModal] = useState(null);
@@ -47,9 +50,21 @@ export default function MainPage() {
   const activeBrain = pageData.brains.find((brain) => brain.id === pageData.activeBrainId) || null;
   const activeTopic = topicsFlat.find((topic) => topic.id === pageData.activeTopicId) || null;
   const isZoomed = graph.scale >= 1.28;
+  const isAuthenticated = authStatus === "authenticated";
 
   // WAS에서 사용자 정보와 토픽 목록을 가져오고, 실패하면 mock 화면을 유지합니다.
   const loadMainData = async () => {
+    if (sessionStorage.getItem(AUTH_STATE_KEY) !== "true") {
+      setAuthStatus("guest");
+      setApiStatus("guest");
+      setPageData((current) => ({
+        ...current,
+        ...guestPreview,
+        user: { name: "Guest", email: "", role: "GUEST" }
+      }));
+      return;
+    }
+
     const requests = await Promise.allSettled([
       apiGet(endpoints.users.me),
       apiGet(endpoints.topics.list())
@@ -60,10 +75,19 @@ export default function MainPage() {
       const next = { ...current };
 
       if (userResult.status === "fulfilled" && userResult.value) {
+        setAuthStatus("authenticated");
         next.user = {
           name: userResult.value.name,
           email: userResult.value.email,
           role: userResult.value.role
+        };
+      } else {
+        sessionStorage.removeItem(AUTH_STATE_KEY);
+        setAuthStatus("guest");
+        return {
+          ...current,
+          ...guestPreview,
+          user: { name: "Guest", email: "", role: "GUEST" }
         };
       }
 
@@ -310,6 +334,25 @@ export default function MainPage() {
   const toggleLeft = () => setLeftCollapsed((value) => !value);
   const toggleRight = () => setRightCollapsed((value) => !value);
 
+  // WAS 로그아웃 후 게스트 메인 화면으로 전환합니다.
+  const logout = async () => {
+    try {
+      await apiPost(endpoints.auth.logout, {});
+    } catch (error) {
+      // 쿠키가 이미 만료된 경우에도 화면 상태는 게스트로 전환합니다.
+    }
+
+    sessionStorage.removeItem(AUTH_STATE_KEY);
+    setAuthStatus("guest");
+    setApiStatus("guest");
+    setPageData((current) => ({
+      ...current,
+      ...guestPreview,
+      user: { name: "Guest", email: "", role: "GUEST" }
+    }));
+    routeTo("/main");
+  };
+
   return (
     <main className={`main-shell ${leftCollapsed ? "is-left-collapsed" : ""} ${rightCollapsed ? "is-right-collapsed" : ""}`} aria-label="Synapse main page">
       {/* 왼쪽 Brain/Topic 탐색 영역입니다. */}
@@ -317,9 +360,11 @@ export default function MainPage() {
         activeBrain={activeBrain}
         activeTopic={activeTopic}
         apiStatus={apiStatus}
+        isAuthenticated={isAuthenticated}
         pageData={pageData}
         onMoveToTopic={moveToTopic}
         onOpenModal={setModal}
+        onLogout={logout}
         onRoute={handleRouteClick}
         onSelectBrain={selectBrain}
         onToggleLeft={toggleLeft}
@@ -338,6 +383,7 @@ export default function MainPage() {
         pageData={pageData}
         topicClusters={topicClusters}
         view={view}
+        isAuthenticated={isAuthenticated}
         onFocusPoint={focusGraphPoint}
         onMoveToTopic={moveToTopic}
         onOpenModal={setModal}
@@ -356,6 +402,7 @@ export default function MainPage() {
       {/* 오른쪽 알림/활동 패널입니다. */}
       <InsightsPanel
         activeBrain={activeBrain}
+        isAuthenticated={isAuthenticated}
         pageData={pageData}
         onRoute={handleRouteClick}
         onToggleRight={toggleRight}

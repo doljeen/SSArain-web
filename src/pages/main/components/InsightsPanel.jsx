@@ -3,7 +3,7 @@ import Icon from "../../../shared/icons/Icon.jsx";
 import { getActivityIcon } from "../config/mainUtils.js";
 
 // 오른쪽 패널: 현재 Brain 정보, 알림 카드, 최근 활동 목록을 담당합니다.
-export default function InsightsPanel({ activeBrain, pageData, onRoute, onToggleRight }) {
+export default function InsightsPanel({ activeBrain, isAuthenticated, pageData, onRoute, onToggleRight }) {
   return (
     <aside className="insights-panel" aria-label="Workspace insights">
       {/* 패널 제목과 접기 버튼입니다. */}
@@ -11,6 +11,15 @@ export default function InsightsPanel({ activeBrain, pageData, onRoute, onToggle
         <h2 className="section-heading">WORKSPACE INSIGHTS</h2>
         <button className="collapse-button inline" type="button" onClick={onToggleRight}>접기</button>
       </div>
+      {!isAuthenticated && (
+        <div className="guest-insights-panel">
+          <p className="guest-access-note">로그인 후 이용 가능합니다.</p>
+          <button className="guest-login-button" type="button" onClick={(event) => onRoute(event, "/login")}>로그인하기</button>
+          <button className="guest-signup-link" type="button" onClick={(event) => onRoute(event, "/signup")}>계정 만들기</button>
+        </div>
+      )}
+      {isAuthenticated && (
+        <>
       {activeBrain && (
         <button className="current-brain" type="button" onClick={(event) => onRoute(event, `/brains/${activeBrain.id}`)}>
           <Icon name="brain" className="brain-large" />
@@ -41,6 +50,8 @@ export default function InsightsPanel({ activeBrain, pageData, onRoute, onToggle
           ))}
         </div>
       </section>
+        </>
+      )}
     </aside>
   );
 }

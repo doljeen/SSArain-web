@@ -237,7 +237,6 @@ button {
 }
 
 .icon-button:hover,
-.settings-button:hover,
 .help-button:hover {
   background: #f3f6fb;
 }
@@ -366,27 +365,13 @@ button {
   font-weight: 650;
 }
 
-.settings-button {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  color: #94a4bc;
-}
-
-.settings-button .icon {
-  width: 17px;
-  height: 17px;
-}
-
 .footer-actions {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.footer-actions > button:not(.settings-button) {
+.footer-actions > button {
   height: 30px;
   padding: 0 8px;
   border-radius: 8px;
@@ -397,8 +382,35 @@ button {
   white-space: nowrap;
 }
 
-.footer-actions > button:not(.settings-button):hover {
+.footer-actions > button:hover {
   color: var(--color-purple-strong);
+}
+
+.guest-sidebar-panel {
+  flex: 1;
+  min-height: 0;
+  padding: 24px 20px;
+  display: grid;
+  place-items: center;
+}
+
+.guest-find-button {
+  width: min(190px, 100%);
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 12px;
+  background: #eef2ff;
+  color: var(--color-purple-strong);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.guest-find-button:hover {
+  background: var(--color-purple-strong);
+  color: #ffffff;
 }
 
 .workspace {
@@ -805,6 +817,43 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.guest-insights-panel {
+  min-height: calc(100vh - 90px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+}
+
+.guest-access-note {
+  margin: 0 0 4px;
+  color: #718096;
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.guest-login-button {
+  width: 100%;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--color-purple-strong);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 880;
+  box-shadow: 0 10px 20px rgba(101, 87, 255, 0.22);
+}
+
+.guest-signup-link {
+  height: 38px;
+  color: var(--color-purple-strong);
+  font-size: 13px;
+  font-weight: 850;
 }
 
 .current-brain {

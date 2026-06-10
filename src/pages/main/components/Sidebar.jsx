@@ -7,11 +7,13 @@ export default function Sidebar({
   activeBrain,
   activeTopic,
   apiStatus,
+  isAuthenticated,
   onRoute,
   onSelectBrain,
   onMoveToTopic,
   onToggleLeft,
-  onOpenModal
+  onOpenModal,
+  onLogout
 }) {
   return (
     <aside className="sidebar" aria-label="Brain navigation">
@@ -22,6 +24,12 @@ export default function Sidebar({
         <button className="collapse-button" type="button" onClick={onToggleLeft} aria-label="왼쪽 메뉴 접기">접기</button>
       </header>
 
+      {!isAuthenticated ? (
+        <section className="guest-sidebar-panel" aria-label="게스트 탐색">
+          <button className="guest-find-button" type="button" data-endpoint={endpoints.brains.list} onClick={(event) => { onRoute(event, "/brains/search"); onOpenModal("findBrain"); }}><Icon name="search" /><span>Brain 찾기</span></button>
+        </section>
+      ) : (
+        <>
       {/* 사용자의 Brain 목록입니다. WAS 연결 여부도 작은 칩으로 보여줍니다. */}
       <section className="brain-list" aria-labelledby="brains-heading">
         <div className="section-row">
@@ -68,19 +76,19 @@ export default function Sidebar({
           ))}
         </div>
       </section>
+        </>
+      )}
 
-      {/* 하단 사용자 정보와 로그인/회원가입/설정 이동 버튼입니다. */}
-      <footer className="user-footer">
+      {/* 하단 사용자 정보와 로그아웃 버튼입니다. 로그인 사용자의 정보만 보여줍니다. */}
+      {isAuthenticated && <footer className="user-footer">
         <button className="user-profile" type="button" onClick={(event) => onRoute(event, "/mypage")}>
           <span className="user-avatar"><Icon name="user" /></span>
           <span><strong>{pageData.user.name || "Admin User"}</strong><small>{pageData.user.email || "admin@synapse.io"}</small></span>
         </button>
         <div className="footer-actions">
-          <button type="button" onClick={(event) => onRoute(event, "/login")}>로그인</button>
-          <button type="button" onClick={(event) => onRoute(event, "/signup")}>가입</button>
-          <button className="settings-button" type="button" onClick={(event) => onRoute(event, "/settings")} aria-label="설정으로 이동"><Icon name="settings" /></button>
+          <button type="button" onClick={onLogout}>로그아웃</button>
         </div>
-      </footer>
+      </footer>}
     </aside>
   );
 }
