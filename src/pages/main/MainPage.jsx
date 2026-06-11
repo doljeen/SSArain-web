@@ -24,7 +24,7 @@ export default function MainPage() {
   // 화면 전체에서 쓰는 데이터입니다. WAS 호출 실패 시 mainMock을 그대로 사용합니다.
   const [pageData, setPageData] = useState(() => clone(mainMock));
 
-  // hash route와 좌우 패널, 보기 모드, 그래프 카메라 상태를 관리합니다.
+  // 현재 route와 좌우 패널, 보기 모드, 그래프 카메라 상태를 관리합니다.
   const [route, setRoute] = useState(getCurrentRoute);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);

@@ -3,11 +3,11 @@ import AuthPage from "./pages/auth/AuthPage.jsx";
 import BrainCreatePage from "./pages/brain-create/BrainCreatePage.jsx";
 import MainPage from "./pages/main/MainPage.jsx";
 import MyPage from "./pages/mypage/MyPage.jsx";
-import { getCurrentRoute, ROUTE_EVENTS, syncDocumentRoute } from "./shared/router/routes.js";
+import { getCurrentRoute, migrateHashRoute, ROUTE_EVENTS, syncDocumentRoute } from "./shared/router/routes.js";
 
 export default function App() {
   // 현재 브라우저 경로(/login, /signup, /main)를 읽어서 보여줄 페이지를 결정합니다.
-  const [route, setRoute] = useState(getCurrentRoute);
+  const [route, setRoute] = useState(() => migrateHashRoute() || getCurrentRoute());
 
   useEffect(() => {
     syncDocumentRoute(route);
