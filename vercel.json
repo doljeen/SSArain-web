@@ -1,11 +1,35 @@
 {
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "http://ec2-13-124-222-178.ap-northeast-2.compute.amazonaws.com/api/$1"
+      "source": "/main",
+      "destination": "/index.html"
     },
     {
-      "source": "/(.*)",
+      "source": "/login",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/signup",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/mypage",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/brains/(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/topics/(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/nodes/(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/comments/(.*)",
       "destination": "/index.html"
     }
   ]
