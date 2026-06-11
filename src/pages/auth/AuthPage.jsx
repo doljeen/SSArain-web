@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { apiPost } from "../../api/client.js";
 import { endpoints } from "../../api/endpoints.js";
 import Icon from "../../shared/icons/Icon.jsx";
+import { routeTo } from "../../shared/router/routes.js";
 
 const getAuthErrorMessage = (message) => {
   if (message.includes("인증되지 않은 이메일")) {
@@ -36,9 +37,7 @@ export default function AuthPage({ mode }) {
   const [nameChecked, setNameChecked] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const moveTo = (path) => {
-    window.location.hash = path;
-  };
+  const moveTo = (path) => routeTo(path);
 
   // 로그인/회원가입 화면을 오갈 때 이전 화면의 안내 문구가 남지 않도록 정리합니다.
   useEffect(() => {

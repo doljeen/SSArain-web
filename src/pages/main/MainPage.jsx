@@ -3,7 +3,7 @@ import { apiGet, apiPost } from "../../api/client.js";
 import { endpoints } from "../../api/endpoints.js";
 import { guestPreview } from "../../data/guestPreview.js";
 import { mainMock } from "../../data/mainMock.js";
-import { getCurrentRoute, routeTo } from "../../shared/router/routes.js";
+import { getCurrentRoute, routeTo, ROUTE_EVENTS, syncDocumentRoute } from "../../shared/router/routes.js";
 import InsightsPanel from "./components/InsightsPanel.jsx";
 import MainModal from "./components/MainModal.jsx";
 import Sidebar from "./components/Sidebar.jsx";
@@ -103,7 +103,7 @@ export default function MainPage() {
 
   useEffect(() => {
     // 첫 진입 시 route와 body data를 동기화하고 WAS 데이터를 불러옵니다.
-    routeTo(route);
+    syncDocumentRoute(route);
 
     const createdWorkspace = window.sessionStorage.getItem(CREATED_WORKSPACE_KEY);
     if (createdWorkspace) {
@@ -123,19 +123,23 @@ export default function MainPage() {
 
     loadMainData();
 
-    // 브라우저 뒤로가기/앞으로가기나 버튼 클릭으로 hash가 바뀌는 경우를 감지합니다.
-    const onHashChange = () => {
+    // 브라우저 뒤로가기/앞으로가기나 버튼 클릭으로 route가 바뀌는 경우를 감지합니다.
+    const onRouteChange = () => {
       const nextRoute = getCurrentRoute();
       setRoute(nextRoute);
-      document.body.dataset.route = nextRoute;
+      syncDocumentRoute(nextRoute);
       const routedTopicId = getTopicIdFromRoute(nextRoute);
       if (routedTopicId) {
         setPageData((current) => ({ ...current, activeTopicId: routedTopicId }));
       }
     };
 
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
+    window.addEventListener("popstate", onRouteChange);
+    window.addEventListener(ROUTE_EVENTS.changed, onRouteChange);
+    return () => {
+      window.removeEventListener("popstate", onRouteChange);
+      window.removeEventListener(ROUTE_EVENTS.changed, onRouteChange);
+    };
   }, []);
 
   // 중앙 허브 주변에 보이는 다른 토픽 묶음의 좌표와 점 개수를 계산합니다.

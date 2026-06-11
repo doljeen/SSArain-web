@@ -3,17 +3,27 @@ import AuthPage from "./pages/auth/AuthPage.jsx";
 import BrainCreatePage from "./pages/brain-create/BrainCreatePage.jsx";
 import MainPage from "./pages/main/MainPage.jsx";
 import MyPage from "./pages/mypage/MyPage.jsx";
-import { getCurrentRoute } from "./shared/router/routes.js";
+import { getCurrentRoute, ROUTE_EVENTS, syncDocumentRoute } from "./shared/router/routes.js";
 
 export default function App() {
-  // hash route(#/login, #/signup, #/main)를 읽어서 보여줄 페이지를 결정합니다.
+  // 현재 브라우저 경로(/login, /signup, /main)를 읽어서 보여줄 페이지를 결정합니다.
   const [route, setRoute] = useState(getCurrentRoute);
 
   useEffect(() => {
-    // 주소 hash가 바뀌면 React 화면도 같이 바뀌도록 동기화합니다.
-    const handleHashChange = () => setRoute(getCurrentRoute());
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
+    syncDocumentRoute(route);
+
+    // history 이동, 뒤로가기/앞으로가기 모두 React 화면과 동기화합니다.
+    const handleRouteChange = () => {
+      const nextRoute = getCurrentRoute();
+      syncDocumentRoute(nextRoute);
+      setRoute(nextRoute);
+    };
+    window.addEventListener("popstate", handleRouteChange);
+    window.addEventListener(ROUTE_EVENTS.changed, handleRouteChange);
+    return () => {
+      window.removeEventListener("popstate", handleRouteChange);
+      window.removeEventListener(ROUTE_EVENTS.changed, handleRouteChange);
+    };
   }, []);
 
   // 로그인/회원가입은 같은 AuthPage 컴포넌트에 mode만 다르게 넘깁니다.
