@@ -38,7 +38,7 @@ export default function InsightsPanel({ activeBrain, isAuthenticated, pageData, 
           ))}
         </div>
       </section>
-      {/* Recent Activity: 최근 작업 이력을 시간순 목록으로 보여줍니다. */}
+      {/* Recent Activity: 최근 작업 이력을 시간순 목록으로 보여줍니다. ,,,*/}
       <section className="activity-section" aria-labelledby="activity-heading">
         <div className="activity-head"><h3 id="activity-heading">Recent Activity</h3><button type="button" onClick={(event) => onRoute(event, "/activity")}>View All</button></div>
         <div className="activity-list">
