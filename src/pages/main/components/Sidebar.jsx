@@ -26,7 +26,7 @@ export default function Sidebar({
 
       {!isAuthenticated ? (
         <section className="guest-sidebar-panel" aria-label="게스트 탐색">
-          <button className="guest-find-button" type="button" data-endpoint={endpoints.brains.list} onClick={(event) => { onRoute(event, "/brains/search"); onOpenModal("findBrain"); }}><Icon name="search" /><span>Brain 찾기</span></button>
+          <button className="guest-find-button" type="button" data-endpoint={endpoints.brains.list} onClick={(event) => onRoute(event, "/brains/search")}><Icon name="search" /><span>Brain 찾기</span></button>
         </section>
       ) : (
         <>
@@ -43,10 +43,10 @@ export default function Sidebar({
             {brain.id === pageData.activeBrainId && <span className="status-dot" aria-hidden="true" />}
           </button>
         ))}
-        {/* Brain 생성/찾기 버튼은 현재 모달과 route 이동을 같이 처리합니다. */}
+        {/* Brain 생성/찾기 버튼입니다. 찾기는 중앙 검색 화면으로 이동합니다. */}
         <div className="brain-actions">
           <button className="create-brain" type="button" data-endpoint={endpoints.brains.create} onClick={(event) => onRoute(event, "/brains/new")}><Icon name="plus" /><span>생성</span></button>
-          <button className="find-brain" type="button" data-endpoint={endpoints.brains.list} onClick={(event) => { onRoute(event, "/brains/search"); onOpenModal("findBrain"); }}><Icon name="search" /><span>찾기</span></button>
+          <button className="find-brain" type="button" data-endpoint={endpoints.brains.list} onClick={(event) => onRoute(event, "/brains/search")}><Icon name="search" /><span>찾기</span></button>
         </div>
       </section>
 

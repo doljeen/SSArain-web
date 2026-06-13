@@ -38,6 +38,8 @@ const getBrainIdFromRoute = (path) => {
   return match ? decodeURIComponent(match[1]) : null;
 };
 
+const isBrainSearchRoute = (path) => path === "/brains/search";
+
 export default function MainPage() {
   // 화면 전체에서 쓰는 데이터입니다. WAS 호출 실패 시 mainMock을 그대로 사용합니다.
   const [pageData, setPageData] = useState(() => clone(mainMock));
@@ -56,6 +58,16 @@ export default function MainPage() {
   const [apiStatus, setApiStatus] = useState("mock");
   const [flying, setFlying] = useState(false);
   const [panning, setPanning] = useState(false);
+  const [brainSearch, setBrainSearch] = useState({
+    query: "",
+    results: [],
+    currentPage: 0,
+    totalPages: 0,
+    totalElements: 0,
+    hasNext: false,
+    isLoading: false,
+    message: ""
+  });
 
   // 그래프 DOM과 드래그/클릭 보정에 필요한 임시 값을 저장합니다.
   const graphFieldRef = useRef(null);
@@ -69,6 +81,7 @@ export default function MainPage() {
   const activeTopic = topicsFlat.find((topic) => String(topic.id) === String(pageData.activeTopicId)) || null;
   const isZoomed = graph.scale >= 1.28;
   const isAuthenticated = authStatus === "authenticated";
+  const isBrainSearchView = isBrainSearchRoute(route);
 
   // BrainTopic 상세 API에서 현재 Topic에 연결된 Node 목록을 가져옵니다.
   const fetchTopicNodes = async (brainId, topicId) => {
@@ -175,6 +188,34 @@ export default function MainPage() {
     }
   };
 
+  // WAS Brain 검색 API(B05)를 호출해 중앙 검색 화면의 목록을 갱신합니다.
+  const searchBrains = async (query = brainSearch.query, page = 0) => {
+    setBrainSearch((current) => ({ ...current, query, isLoading: true, message: "" }));
+
+    try {
+      const result = await apiGet(endpoints.brains.search(query, page, 6));
+      setBrainSearch({
+        query,
+        results: result?.brains || [],
+        currentPage: result?.currentPage || 0,
+        totalPages: result?.totalPages || 0,
+        totalElements: result?.totalElements || 0,
+        hasNext: Boolean(result?.hasNext),
+        isLoading: false,
+        message: ""
+      });
+    } catch (error) {
+      setBrainSearch((current) => ({
+        ...current,
+        results: [],
+        isLoading: false,
+        message: sessionStorage.getItem(AUTH_STATE_KEY) === "true"
+          ? `Brain 검색 실패 · ${error.message}`
+          : "Brain 검색은 로그인 후 이용할 수 있습니다."
+      }));
+    }
+  };
+
   useEffect(() => {
     // 첫 진입 시 route와 body data를 동기화하고 WAS 데이터를 불러옵니다.
     syncDocumentRoute(route);
@@ -196,6 +237,9 @@ export default function MainPage() {
     }
 
     loadMainData();
+    if (isBrainSearchRoute(route)) {
+      searchBrains("", 0);
+    }
 
     // 브라우저 뒤로가기/앞으로가기나 버튼 클릭으로 route가 바뀌는 경우를 감지합니다.
     const onRouteChange = () => {
@@ -205,6 +249,9 @@ export default function MainPage() {
       const routedTopicId = getTopicIdFromRoute(nextRoute);
       if (routedTopicId) {
         setPageData((current) => ({ ...current, activeTopicId: routedTopicId }));
+      }
+      if (isBrainSearchRoute(nextRoute)) {
+        searchBrains("", 0);
       }
     };
 
@@ -309,16 +356,6 @@ export default function MainPage() {
         }
         setModal(null);
         showToast(`Topic 생성 완료 · ${createdTopic.name || name}`);
-        return;
-      }
-
-      if (modal === "findBrain") {
-        const input = document.querySelector(".modal-fields input");
-        const keyword = input?.value?.trim() || "";
-        const result = await apiGet(endpoints.brains.search(keyword));
-        const count = result?.totalElements ?? result?.brains?.length ?? 0;
-        setModal(null);
-        showToast(`Brain 검색 결과 ${count}개`);
         return;
       }
 
@@ -449,6 +486,11 @@ export default function MainPage() {
   const toggleLeft = () => setLeftCollapsed((value) => !value);
   const toggleRight = () => setRightCollapsed((value) => !value);
 
+  // WAS에 Brain 가입 API가 아직 없으므로 버튼 클릭 시 현재 가능한 상태만 안내합니다.
+  const requestJoinBrain = (brain) => {
+    showToast(`${brain.name} 가입 API가 아직 준비되지 않았습니다.`);
+  };
+
   // WAS 로그아웃 후 게스트 메인 화면으로 전환합니다.
   const logout = async () => {
     try {
@@ -498,10 +540,14 @@ export default function MainPage() {
         pageData={pageData}
         topicClusters={topicClusters}
         view={view}
+        brainSearch={brainSearch}
         isAuthenticated={isAuthenticated}
+        isBrainSearchView={isBrainSearchView}
         onFocusPoint={focusGraphPoint}
+        onJoinBrain={requestJoinBrain}
         onMoveToTopic={moveToTopic}
         onOpenModal={setModal}
+        onSearchBrains={searchBrains}
         isRightPanelOpen={!rightCollapsed}
         onToggleRight={toggleRight}
         onPointerDown={handlePointerDown}

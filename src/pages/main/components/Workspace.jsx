@@ -10,10 +10,14 @@ export default function Workspace({
   graphClassName,
   graphFieldRef,
   pageData,
+  brainSearch,
   topicClusters,
   view,
   isAuthenticated,
+  isBrainSearchView,
   onRoute,
+  onSearchBrains,
+  onJoinBrain,
   onMoveToTopic,
   onPointerDown,
   onPointerMove,
@@ -28,6 +32,12 @@ export default function Workspace({
   onToggleRight
 }) {
   const hasActiveTopic = Boolean(activeTopic);
+
+  const submitBrainSearch = (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    onSearchBrains(String(formData.get("brainKeyword") || "").trim(), 0);
+  };
 
   return (
     <section className="workspace" aria-label="Synapse workspace">
@@ -48,9 +58,56 @@ export default function Workspace({
         </div>
       </header>
 
-      {/* 그래프 패널입니다. Pointer/Wheel 이벤트는 MainPage에서 받아 카메라 상태를 바꿉니다. */}
-      <div ref={graphFieldRef} className={graphClassName} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onWheel={onWheel}>
-        {view === "synapse" && hasActiveTopic ? (
+      {isBrainSearchView ? (
+        <section className="brain-search-view" aria-labelledby="brain-search-heading">
+          <form className="brain-search-form" onSubmit={submitBrainSearch}>
+            <label htmlFor="brain-search-input" className="sr-only">Brain 명 검색</label>
+            <input id="brain-search-input" name="brainKeyword" type="search" defaultValue={brainSearch.query} placeholder="Brain 명 검색" />
+            <button type="submit" disabled={brainSearch.isLoading}>{brainSearch.isLoading ? "검색 중" : "검색"}</button>
+          </form>
+
+          <div className="brain-search-summary">
+            <div>
+              <p className="panel-kicker">FIND BRAIN</p>
+              <h1 id="brain-search-heading">Brain 찾기</h1>
+            </div>
+            <span>{brainSearch.totalElements}개 결과</span>
+          </div>
+
+          {brainSearch.message ? (
+            <p className="brain-search-message" role="status">{brainSearch.message}</p>
+          ) : (
+            <div className="brain-result-grid">
+              {brainSearch.results.map((brain) => (
+                <article className="brain-result-card" key={brain.id}>
+                  <div className="brain-result-top">
+                    <strong>{brain.name}</strong>
+                    <span>{brain.adminName || "관리자 미지정"}</span>
+                  </div>
+                  <p>{brain.description || "등록된 소개 문구가 없습니다."}</p>
+                  <div className="brain-result-bottom">
+                    <small>가입 인원 {brain.memberNames?.length || 0}명</small>
+                    <button type="button" onClick={() => onJoinBrain(brain)}>가입</button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+
+          {!brainSearch.message && !brainSearch.results.length && !brainSearch.isLoading && (
+            <p className="brain-search-empty">검색 결과가 없습니다.</p>
+          )}
+
+          <div className="brain-pagination" aria-label="Brain 검색 페이지네이션">
+            <button type="button" disabled={brainSearch.isLoading || brainSearch.currentPage <= 0} onClick={() => onSearchBrains(brainSearch.query, brainSearch.currentPage - 1)}>이전</button>
+            <span>{brainSearch.totalPages ? `${brainSearch.currentPage + 1} / ${brainSearch.totalPages}` : "0 / 0"}</span>
+            <button type="button" disabled={brainSearch.isLoading || !brainSearch.hasNext} onClick={() => onSearchBrains(brainSearch.query, brainSearch.currentPage + 1)}>다음</button>
+          </div>
+        </section>
+      ) : (
+        // 그래프 패널입니다. Pointer/Wheel 이벤트는 MainPage에서 받아 카메라 상태를 바꿉니다.
+        <div ref={graphFieldRef} className={graphClassName} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onWheel={onWheel}>
+          {view === "synapse" && hasActiveTopic ? (
           <>
             {/* CSS 변수로 pan/zoom/tilt 값을 내려서 Prezi식 이동을 표현합니다. */}
             <div className="graph-viewport" style={{ "--pan-x": `${graph.x}px`, "--pan-y": `${graph.y}px`, "--zoom": graph.scale, "--tilt": `${graph.tilt || 0}deg` }}>
@@ -94,7 +151,7 @@ export default function Workspace({
               <button type="button" onClick={() => onZoom(graph.scale * 1.15, window.innerWidth / 2, window.innerHeight / 2)} aria-label="확대">+</button>
             </div>
           </>
-        ) : view === "posts" && hasActiveTopic ? (
+          ) : view === "posts" && hasActiveTopic ? (
           // Post List 보기에서는 현재 Topic의 문서 목록 형태로 노드를 보여줍니다.
           <div className="post-list">
             {pageData.nodes.slice(0, 8).map((node) => (
@@ -104,8 +161,9 @@ export default function Workspace({
               </button>
             ))}
           </div>
-        ) : null}
-      </div>
+          ) : null}
+        </div>
+      )}
       {/* 도움말 모달을 여는 플로팅 버튼입니다. */}
       <button className="help-button" type="button" onClick={(event) => { onRoute(event, "/help"); onOpenModal("help"); }} aria-label="도움말">?</button>
     </section>
