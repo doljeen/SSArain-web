@@ -56,7 +56,7 @@ export default function Workspace({
             <div className="graph-viewport" style={{ "--pan-x": `${graph.x}px`, "--pan-y": `${graph.y}px`, "--zoom": graph.scale, "--tilt": `${graph.tilt || 0}deg` }}>
               {/* 현재 Topic 주변에 배치되는 다른 Topic 클러스터들입니다. */}
               {topicClusters.map((topic) => (
-                <button key={topic.id} className="graph-node topic-hub" type="button" data-endpoint={endpoints.topics.detail(topic.id)} style={{ "--cluster-x": `${topic.x}px`, "--cluster-y": `${topic.y}px` }} onClick={(event) => onMoveToTopic(event, topic.id)} aria-label={`${topic.name} 토픽으로 이동`}>
+                <button key={topic.id} className="graph-node topic-hub" type="button" data-endpoint={endpoints.topics.detail(topic.id)} style={{ "--cluster-x": `${topic.x}px`, "--cluster-y": `${topic.y}px` }} onClick={(event) => onMoveToTopic(event, topic.id, { updateRoute: false })} aria-label={`${topic.name} 토픽으로 이동`}>
                   <span className="topic-orbit" aria-hidden="true">
                     {Array.from({ length: topic.count }).map((_, index) => {
                       const angle = (360 / topic.count) * index;
@@ -67,7 +67,7 @@ export default function Workspace({
                 </button>
               ))}
               {/* 중앙 허브는 현재 보고 있는 Topic을 나타냅니다. */}
-              <button className="graph-node hub" type="button" data-endpoint={endpoints.topics.detail(activeTopic.id)} onClick={(event) => onMoveToTopic(event, activeTopic.id)}>
+              <button className="graph-node hub" type="button" data-endpoint={endpoints.topics.detail(activeTopic.id)} onClick={(event) => onMoveToTopic(event, activeTopic.id, { updateRoute: false })}>
                 <span dangerouslySetInnerHTML={{ __html: activeTopic.name.replace(" ", "<br>") }} />
               </button>
               {/* 문서 노드와 중앙 허브를 잇는 선을 좌표 기반으로 그립니다. */}
@@ -79,7 +79,7 @@ export default function Workspace({
                 return (
                   <span key={`${node.id}-${index}`}>
                     <span className="node-link" style={{ "--angle": `${angle}deg`, "--link-length": `${length}px` }} aria-hidden="true" />
-                    <button className="graph-node doc-node" type="button" data-endpoint={endpoints.nodes.detail(node.id)} style={{ "--node-x": `${x}px`, "--node-y": `${y}px` }} onClick={(event) => { onFocusPoint(x, y, 1.65); onRoute(event, `/nodes/${node.id}`); }} aria-label={`${node.title} 노드로 이동`} title={node.title}>
+                    <button className="graph-node doc-node" type="button" data-endpoint={endpoints.nodes.detail(node.id)} style={{ "--node-x": `${x}px`, "--node-y": `${y}px` }} onClick={() => onFocusPoint(x, y, 1.65)} aria-label={`${node.title} 노드로 이동`} title={node.title}>
                       <Icon name="file" />
                       <span className="node-caption"><strong>{node.title}</strong><small>댓글 {node.comments}개</small></span>
                     </button>
@@ -98,7 +98,7 @@ export default function Workspace({
           // Post List 보기에서는 현재 Topic의 문서 목록 형태로 노드를 보여줍니다.
           <div className="post-list">
             {pageData.nodes.slice(0, 8).map((node) => (
-              <button className="post-row" type="button" key={node.id} onClick={(event) => onRoute(event, `/nodes/${node.id}`)}>
+              <button className="post-row" type="button" key={node.id} onClick={() => onFocusPoint(0, 0, 1.35)}>
                 <span className="post-icon"><Icon name="file" /></span>
                 <span><strong>{node.title}</strong><small>{activeTopic.name} · 댓글 {node.comments}개</small></span>
               </button>

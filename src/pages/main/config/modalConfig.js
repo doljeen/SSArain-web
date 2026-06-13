@@ -3,18 +3,18 @@ import { endpoints } from "../../../api/endpoints.js";
 // MainModal에 표시할 제목/설명/입력 필드/확인 버튼 endpoint를 만듭니다.
 // activeTopic과 user 값은 현재 화면 상태에 따라 동적으로 바뀝니다.
 export const createModalCopy = ({ activeTopic, user }) => ({
-  // Brain 생성 모달입니다. WAS Brain 생성 API가 완성되면 실제 요청으로 연결됩니다.
+  // Brain 생성 모달입니다. 현재 화면에서는 전용 생성 페이지로 이동해서 처리합니다.
   createBrain: {
     title: "Create Brain",
-    description: "Brain API는 WAS에 아직 없어서 프론트 라우트만 준비되어 있습니다.",
+    description: "Brain 생성 페이지에서 WAS Brain 생성 API로 처리합니다.",
     primary: "Brain 생성",
     endpoint: endpoints.brains.create,
     fields: ["Brain 이름", "첫 Topic 이름"]
   },
-  // Brain 검색 모달입니다. 이후 검색 페이지나 API 연결 지점으로 사용합니다.
+  // Brain 검색 모달입니다. WAS Brain 검색 API에 연결됩니다.
   findBrain: {
     title: "Find Brain",
-    description: "Brain 검색 API가 추가되면 이 화면에 연결됩니다.",
+    description: "검색어와 일치하는 Brain을 조회합니다.",
     primary: "검색",
     endpoint: endpoints.brains.list,
     fields: ["검색어"]

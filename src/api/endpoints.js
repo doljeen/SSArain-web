@@ -24,20 +24,13 @@ export const endpoints = {
   },
   // Brain 관련 엔드포인트입니다. 일부는 이후 페이지 구현을 위해 미리 정리해둔 상태입니다.
   brains: {
-    join: (brainId) => `/brains/${brainId}/users`,
-    removeUsers: (brainId) => `/brains/${brainId}/users`,
     mine: "/brains/me",
     list: "/brains",
+    search: (name = "", page = 0, size = 9) => `/brains?${query({ name, page, size })}`,
     create: "/brains",
-    update: (brainId) => `/brains/${brainId}`,
-    remove: (brainId) => `/brains/${brainId}`,
-    addTopic: (brainId, topicId) => `/brains/${brainId}/topics/${topicId}`,
+    registerTopics: (brainId) => `/brains/${brainId}/topics`,
     topics: (brainId) => `/brains/${brainId}/topics`,
-    removeTopic: (brainId, topicId) => `/brains/${brainId}/topics/${topicId}`,
-    availableUsers: (brainId, search) => `/brains/available-users?${query({ search, bid: brainId })}`,
-    checkName: (name) => `/brains/check-name?${query({ name })}`,
-    joinRequests: (brainId) => `/brains/${brainId}/join-requests`,
-    manageJoinRequest: (brainId) => `/brains/${brainId}/join-manage`
+    topicDetail: (brainId, topicId) => `/brains/${brainId}/topics/${topicId}`
   },
   // Topic 트리 조회/상세/생성/수정/삭제 엔드포인트입니다.
   topics: {
@@ -64,8 +57,8 @@ export const endpoints = {
   },
   // 퀴즈 관련 엔드포인트입니다.
   quizzes: {
-    list: (brainId, topicId) => `/quizzes?${query({ brain: brainId, topic: topicId })}`,
-    create: "/quizzes"
+    list: (brainTopicId) => `/quizzes?${query({ btid: brainTopicId })}`,
+    create: (brainTopicId) => `/quizzes?${query({ btid: brainTopicId })}`
   },
   // 알림 API는 WAS에 연결되면 list 경로를 채울 예정입니다.
   notifications: {
@@ -84,20 +77,12 @@ export const endpointMeta = {
     emailVerify: { code: "A06", method: "POST" }
   },
   brains: {
-    join: { code: "B01", method: "POST" },
-    removeUsers: { code: "B03", method: "DELETE" },
     mine: { code: "B04", method: "GET" },
     list: { code: "B05", method: "GET" },
     create: { code: "B06", method: "POST" },
-    update: { code: "B07", method: "PATCH" },
-    remove: { code: "B08", method: "DELETE" },
-    addTopic: { code: "B09", method: "POST" },
+    registerTopics: { code: "B09", method: "POST" },
     topics: { code: "B10", method: "GET" },
-    removeTopic: { code: "B11", method: "DELETE" },
-    availableUsers: { code: "B12", method: "GET" },
-    checkName: { code: "B13", method: "GET" },
-    joinRequests: { code: "B14", method: "GET" },
-    manageJoinRequest: { code: "B15", method: "POST" }
+    topicDetail: { code: "B16", method: "GET" }
   },
   topics: {
     list: { code: "T01", method: "GET" },

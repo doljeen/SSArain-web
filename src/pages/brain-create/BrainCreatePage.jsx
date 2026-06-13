@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { apiPost } from "../../api/client.js";
 import { endpoints } from "../../api/endpoints.js";
-import { createBrainWorkspace } from "../../data/createdBrainTemplate.js";
 import Icon from "../../shared/icons/Icon.jsx";
 import { routeTo } from "../../shared/router/routes.js";
 
@@ -61,15 +60,28 @@ export default function BrainCreatePage() {
 
     try {
       const created = await apiPost(endpoints.brains.create, payload);
-      const brainId = created?.bid || created?.id || `brain-${Date.now()}`;
-      const workspace = createBrainWorkspace({ id: brainId, ...payload, members });
+      const brainId = String(created?.id);
+      const workspace = {
+        activeBrainId: brainId,
+        activeTopicId: null,
+        brains: [{
+          id: brainId,
+          name: created?.name || payload.name,
+          description: created?.description || payload.description,
+          joinPolicy: payload.joinPolicy,
+          owner: "나",
+          members: 1,
+          topicsCount: Array.isArray(created?.topics) ? created.topics.length : 0
+        }],
+        topics: [],
+        nodes: [],
+        notifications: [],
+        activities: []
+      };
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
       moveTo("/main");
     } catch (error) {
-      const workspace = createBrainWorkspace({ id: `brain-${Date.now()}`, ...payload, members });
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
-      setStatus(`서버 생성은 실패했지만 화면 확인용 Brain을 만들었습니다. ${error.message}`);
-      window.setTimeout(() => moveTo("/main"), 500);
+      setStatus(`Brain 생성 실패 · ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }

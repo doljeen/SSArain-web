@@ -10,13 +10,31 @@ import Sidebar from "./components/Sidebar.jsx";
 import Workspace from "./components/Workspace.jsx";
 import { clusterPositions } from "./config/graphConfig.js";
 import { createModalCopy } from "./config/modalConfig.js";
-import { buildTopicTree, clone, flattenTopics } from "./config/mainUtils.js";
+import { buildTopicTree, clone, flattenTopics, normalizeBrain, normalizeNodes } from "./config/mainUtils.js";
 
 const CREATED_WORKSPACE_KEY = "ssarain-created-workspace";
 const AUTH_STATE_KEY = "ssarain-authenticated";
+const MIN_GRAPH_SCALE = 0.72;
+const MAX_GRAPH_SCALE = 2.2;
+const MAX_GRAPH_PAN_X = 620;
+const MAX_GRAPH_PAN_Y = 420;
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const clampGraph = (graphState) => ({
+  ...graphState,
+  scale: clamp(graphState.scale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE),
+  x: clamp(graphState.x, -MAX_GRAPH_PAN_X, MAX_GRAPH_PAN_X),
+  y: clamp(graphState.y, -MAX_GRAPH_PAN_Y, MAX_GRAPH_PAN_Y)
+});
 
 const getTopicIdFromRoute = (path) => {
   const match = path.match(/^\/topics\/([^/]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+};
+
+const getBrainIdFromRoute = (path) => {
+  const match = path.match(/^\/brains\/([^/]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 };
 
@@ -24,7 +42,7 @@ export default function MainPage() {
   // 화면 전체에서 쓰는 데이터입니다. WAS 호출 실패 시 mainMock을 그대로 사용합니다.
   const [pageData, setPageData] = useState(() => clone(mainMock));
 
-  // hash route와 좌우 패널, 보기 모드, 그래프 카메라 상태를 관리합니다.
+  // 현재 route와 좌우 패널, 보기 모드, 그래프 카메라 상태를 관리합니다.
   const [route, setRoute] = useState(getCurrentRoute);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
@@ -47,12 +65,50 @@ export default function MainPage() {
 
   // 트리 구조의 토픽을 펼쳐서 현재 선택된 Brain/Topic을 계산합니다.
   const topicsFlat = useMemo(() => flattenTopics(pageData.topics), [pageData.topics]);
-  const activeBrain = pageData.brains.find((brain) => brain.id === pageData.activeBrainId) || null;
-  const activeTopic = topicsFlat.find((topic) => topic.id === pageData.activeTopicId) || null;
+  const activeBrain = pageData.brains.find((brain) => String(brain.id) === String(pageData.activeBrainId)) || null;
+  const activeTopic = topicsFlat.find((topic) => String(topic.id) === String(pageData.activeTopicId)) || null;
   const isZoomed = graph.scale >= 1.28;
   const isAuthenticated = authStatus === "authenticated";
 
-  // WAS에서 사용자 정보와 토픽 목록을 가져오고, 실패하면 mock 화면을 유지합니다.
+  // BrainTopic 상세 API에서 현재 Topic에 연결된 Node 목록을 가져옵니다.
+  const fetchTopicNodes = async (brainId, topicId) => {
+    if (!brainId || !topicId) return [];
+
+    try {
+      const detail = await apiGet(endpoints.brains.topicDetail(brainId, topicId));
+      return normalizeNodes(detail?.nodes || []);
+    } catch (error) {
+      return [];
+    }
+  };
+
+  // 특정 Brain의 Topic 트리와 선택 Topic의 Node를 WAS에서 다시 불러옵니다.
+  const loadBrainWorkspace = async (brainId, requestedTopicId = null) => {
+    if (!brainId) return;
+
+    try {
+      const detail = await apiGet(endpoints.brains.topics(brainId));
+      const topics = buildTopicTree(detail?.topics || []);
+      const flatTopics = flattenTopics(topics);
+      const selectedTopic = flatTopics.find((topic) => String(topic.id) === String(requestedTopicId)) || flatTopics[0] || null;
+      const nodes = selectedTopic ? await fetchTopicNodes(brainId, selectedTopic.id) : [];
+      const normalizedBrain = normalizeBrain({ ...detail, topics: detail?.topics || [] });
+
+      setPageData((current) => ({
+        ...current,
+        activeBrainId: String(normalizedBrain.id),
+        activeTopicId: selectedTopic ? String(selectedTopic.id) : null,
+        brains: current.brains.map((brain) => String(brain.id) === String(normalizedBrain.id) ? normalizedBrain : brain),
+        topics,
+        nodes
+      }));
+      setApiStatus("was");
+    } catch (error) {
+      showToast(`Brain 정보를 불러오지 못했습니다 · ${error.message}`);
+    }
+  };
+
+  // WAS에서 사용자, 내 Brain, 선택 Brain의 Topic/Node 목록을 가져옵니다.
   const loadMainData = async () => {
     if (sessionStorage.getItem(AUTH_STATE_KEY) !== "true") {
       setAuthStatus("guest");
@@ -65,40 +121,58 @@ export default function MainPage() {
       return;
     }
 
-    const requests = await Promise.allSettled([
-      apiGet(endpoints.users.me),
-      apiGet(endpoints.topics.list())
-    ]);
-    const [userResult, topicsResult] = requests;
+    try {
+      const [userInfo, myBrains] = await Promise.all([
+        apiGet(endpoints.users.me),
+        apiGet(endpoints.brains.mine)
+      ]);
+      const brains = (myBrains?.brains || []).map(normalizeBrain);
+      const routedBrainId = getBrainIdFromRoute(route);
+      const selectedBrain = brains.find((brain) => String(brain.id) === String(routedBrainId)) || brains[0] || null;
 
-    setPageData((current) => {
-      const next = { ...current };
+      let topics = [];
+      let nodes = [];
+      let activeTopicId = null;
+      let nextBrains = brains;
 
-      if (userResult.status === "fulfilled" && userResult.value) {
-        setAuthStatus("authenticated");
-        next.user = {
-          name: userResult.value.name,
-          email: userResult.value.email,
-          role: userResult.value.role
-        };
-      } else {
-        sessionStorage.removeItem(AUTH_STATE_KEY);
-        setAuthStatus("guest");
-        return {
-          ...current,
-          ...guestPreview,
-          user: { name: "Guest", email: "", role: "GUEST" }
-        };
+      if (selectedBrain) {
+        const brainDetail = await apiGet(endpoints.brains.topics(selectedBrain.id));
+        topics = buildTopicTree(brainDetail?.topics || []);
+        const flatTopics = flattenTopics(topics);
+        const routedTopicId = getTopicIdFromRoute(route);
+        const selectedTopic = flatTopics.find((topic) => String(topic.id) === String(routedTopicId)) || flatTopics[0] || null;
+        activeTopicId = selectedTopic ? String(selectedTopic.id) : null;
+        nodes = selectedTopic ? await fetchTopicNodes(selectedBrain.id, selectedTopic.id) : [];
+
+        const detailBrain = normalizeBrain({ ...brainDetail, topics: brainDetail?.topics || [] });
+        nextBrains = brains.map((brain) => String(brain.id) === String(detailBrain.id) ? detailBrain : brain);
       }
 
-      if (topicsResult.status === "fulfilled" && Array.isArray(topicsResult.value) && topicsResult.value.length) {
-        next.topics = buildTopicTree(topicsResult.value);
-      }
-
-      return next;
-    });
-
-    setApiStatus(requests.some((result) => result.status === "fulfilled") ? "was" : "mock");
+      setAuthStatus("authenticated");
+      setApiStatus("was");
+      setPageData((current) => ({
+        ...current,
+        user: {
+          name: userInfo.name,
+          email: userInfo.email,
+          role: userInfo.role
+        },
+        activeBrainId: selectedBrain ? String(selectedBrain.id) : null,
+        activeTopicId,
+        brains: nextBrains,
+        topics,
+        nodes
+      }));
+    } catch (error) {
+      sessionStorage.removeItem(AUTH_STATE_KEY);
+      setAuthStatus("guest");
+      setApiStatus("guest");
+      setPageData((current) => ({
+        ...current,
+        ...guestPreview,
+        user: { name: "Guest", email: "", role: "GUEST" }
+      }));
+    }
   };
 
   useEffect(() => {
@@ -171,21 +245,21 @@ export default function MainPage() {
     const centerY = rect.top + (rect.height * 0.54);
 
     setGraph((current) => {
-      const clampedScale = Math.min(2.4, Math.max(0.45, nextScale));
+      const clampedScale = clamp(nextScale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE);
       const localX = (anchorX - centerX - current.x) / current.scale;
       const localY = (anchorY - centerY - current.y) / current.scale;
-      return {
+      return clampGraph({
         scale: clampedScale,
         x: anchorX - centerX - (localX * clampedScale),
         y: anchorY - centerY - (localY * clampedScale),
         tilt: 0
-      };
+      });
     });
   };
 
   // 토픽/노드 클릭 시 축소 후 이동하고 다시 확대하는 Prezi 느낌의 카메라 이동입니다.
   const focusGraphPoint = (x, y, scale) => {
-    const clampedScale = Math.min(2.4, Math.max(0.45, scale));
+    const clampedScale = clamp(scale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE);
 
     window.clearTimeout(flightTimer.current);
     setFlying(true);
@@ -195,17 +269,17 @@ export default function MainPage() {
       const targetY = -y * clampedScale;
       const travelX = targetX - current.x;
       const tilt = Math.max(-1.8, Math.min(1.8, travelX / 420));
-      return {
+      return clampGraph({
         scale: Math.max(0.72, Math.min(current.scale, 1) * 0.88),
         x: current.x + ((targetX - current.x) * 0.18),
         y: current.y + ((targetY - current.y) * 0.18),
         tilt
-      };
+      });
     });
 
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
-        setGraph({ scale: clampedScale, x: -x * clampedScale, y: -y * clampedScale, tilt: 0 });
+        setGraph(clampGraph({ scale: clampedScale, x: -x * clampedScale, y: -y * clampedScale, tilt: 0 }));
       });
     });
 
@@ -227,9 +301,24 @@ export default function MainPage() {
         const input = document.querySelector(".modal-fields input");
         const name = input?.value?.trim() || "새 Topic";
         const createdTopic = await apiPost(copy.endpoint, { name });
+        if (activeBrain && createdTopic?.tid != null) {
+          await apiPost(endpoints.brains.registerTopics(activeBrain.id), { topics: [createdTopic.tid] });
+          await loadBrainWorkspace(activeBrain.id, String(createdTopic.tid));
+        } else {
+          await loadMainData();
+        }
         setModal(null);
         showToast(`Topic 생성 완료 · ${createdTopic.name || name}`);
-        await loadMainData();
+        return;
+      }
+
+      if (modal === "findBrain") {
+        const input = document.querySelector(".modal-fields input");
+        const keyword = input?.value?.trim() || "";
+        const result = await apiGet(endpoints.brains.search(keyword));
+        const count = result?.totalElements ?? result?.brains?.length ?? 0;
+        setModal(null);
+        showToast(`Brain 검색 결과 ${count}개`);
         return;
       }
 
@@ -257,12 +346,15 @@ export default function MainPage() {
   const selectBrain = (event, brainId) => {
     setPageData((current) => ({ ...current, activeBrainId: brainId }));
     handleRouteClick(event, `/brains/${brainId}`);
+    loadBrainWorkspace(brainId);
   };
 
   // Topic 클릭 시 중앙 내용을 바꾸지 않고 그래프 카메라만 해당 토픽 방향으로 이동합니다.
-  const moveToTopic = (event, topicId) => {
+  const moveToTopic = (event, topicId, options = {}) => {
+    const shouldUpdateRoute = options.updateRoute !== false;
+
     if (suppressNextClick.current) {
-      handleRouteClick(event, `/topics/${topicId}`);
+      if (shouldUpdateRoute) handleRouteClick(event, `/topics/${topicId}`);
       return;
     }
 
@@ -274,7 +366,12 @@ export default function MainPage() {
     }
 
     setPageData((current) => ({ ...current, activeTopicId: topicId }));
-    handleRouteClick(event, `/topics/${topicId}`);
+    if (activeBrain) {
+      fetchTopicNodes(activeBrain.id, topicId).then((nodes) => {
+        setPageData((current) => String(current.activeTopicId) === String(topicId) ? { ...current, nodes } : current);
+      });
+    }
+    if (shouldUpdateRoute) handleRouteClick(event, `/topics/${topicId}`);
   };
 
   // 그래프 빈 영역을 누르면 pan 시작 정보를 저장합니다.
@@ -284,6 +381,7 @@ export default function MainPage() {
     if (event.target instanceof Element && event.target.closest("button, a, input, textarea, select")) return;
 
     panSession.current = {
+      pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
       originX: graph.x,
@@ -291,20 +389,26 @@ export default function MainPage() {
       moved: false
     };
     setPanning(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    } catch (error) {
+      // route 변경이나 브라우저 제스처 중 capture가 실패해도 그래프 화면은 유지합니다.
+    }
   };
 
   // 드래그 중인 거리만큼 그래프 카메라 좌표를 이동합니다.
   const handlePointerMove = (event) => {
-    if (!panSession.current) return;
+    const session = panSession.current;
+    if (!session) return;
 
-    const dx = event.clientX - panSession.current.startX;
-    const dy = event.clientY - panSession.current.startY;
-    if (Math.abs(dx) + Math.abs(dy) > 6) panSession.current.moved = true;
-    setGraph((current) => ({
+    event.preventDefault();
+    const dx = event.clientX - session.startX;
+    const dy = event.clientY - session.startY;
+    if (Math.abs(dx) + Math.abs(dy) > 6) session.moved = true;
+    setGraph((current) => clampGraph({
       ...current,
-      x: panSession.current.originX + dx,
-      y: panSession.current.originY + dy
+      x: session.originX + dx,
+      y: session.originY + dy
     }));
   };
 
@@ -315,7 +419,13 @@ export default function MainPage() {
     if (panSession.current.moved) suppressNextClick.current = true;
     panSession.current = null;
     setPanning(false);
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    try {
+      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    } catch (error) {
+      // 이미 capture가 해제된 경우 무시합니다.
+    }
   };
 
   // 휠 스크롤로 그래프를 확대/축소합니다.
@@ -323,6 +433,7 @@ export default function MainPage() {
     if (view !== "synapse" || !activeTopic) return;
 
     event.preventDefault();
+    event.stopPropagation();
     zoomGraph(graph.scale * (event.deltaY > 0 ? 0.9 : 1.1), event.clientX, event.clientY);
   };
 
