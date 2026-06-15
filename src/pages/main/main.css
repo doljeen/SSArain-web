@@ -580,6 +580,22 @@ button {
   color: #253246;
 }
 
+.manage-mode-button {
+  border: 1px solid #e2e8f0;
+}
+
+.manage-mode-button .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.manage-mode-button.is-active {
+  border-color: rgba(101, 87, 255, 0.35);
+  background: var(--color-purple-strong);
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(101, 87, 255, 0.24);
+}
+
 .notice-trigger.is-open {
   background: var(--color-purple-strong);
   color: #ffffff;
@@ -647,6 +663,39 @@ button {
 
 .graph-field.is-flying .graph-viewport {
   transition: transform 720ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.topic-add-floating {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(86px, 12vh, 132px);
+  z-index: 12;
+  height: 48px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(101, 87, 255, 0.22);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--color-purple-strong);
+  font-size: 14px;
+  font-weight: 900;
+  white-space: nowrap;
+  box-shadow: 0 18px 38px rgba(38, 47, 72, 0.14);
+  transform: translateX(-50%);
+  backdrop-filter: blur(12px);
+}
+
+.topic-add-floating:hover {
+  background: #f4f2ff;
+  box-shadow: 0 22px 42px rgba(101, 87, 255, 0.18);
+}
+
+.topic-add-floating .icon {
+  width: 17px;
+  height: 17px;
 }
 
 .brain-search-view {

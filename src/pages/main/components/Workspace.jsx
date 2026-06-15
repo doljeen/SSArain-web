@@ -16,6 +16,8 @@ export default function Workspace({
   view,
   isAuthenticated,
   isBrainSearchView,
+  canManageWorkspace,
+  manageMode,
   onRoute,
   onSearchBrains,
   onJoinBrain,
@@ -31,7 +33,9 @@ export default function Workspace({
   onSetView,
   onZoom,
   onOpenModal,
+  onRequestTopicCreate,
   isRightPanelOpen,
+  onToggleManageMode,
   onToggleRight
 }) {
   const hasActiveTopic = Boolean(activeTopic);
@@ -73,6 +77,12 @@ export default function Workspace({
           {activeTopic && <button className="crumb-chip" type="button" onClick={(event) => onRoute(event, `/topics/${activeTopic.id}`)}>{activeTopic.name}</button>}
         </nav>
         <div className="header-actions">
+          {canManageWorkspace && (
+            <button className={`header-button manage-mode-button ${manageMode ? "is-active" : ""}`} type="button" onClick={onToggleManageMode} aria-pressed={manageMode}>
+              <Icon name="settings" />
+              <span>관리모드</span>
+            </button>
+          )}
           <div className="view-tabs" role="tablist" aria-label="보기 전환">
             <button className={`view-tab ${view === "synapse" ? "is-active" : ""}`} type="button" role="tab" aria-selected={view === "synapse"} onClick={(event) => { onRoute(event, activeTopic ? `/topics/${activeTopic.id}/synapse` : "/main/synapse"); onSetView("synapse"); }}><Icon name="synapse" /><span>Synapse View</span></button>
             <button className={`view-tab ${view === "posts" ? "is-active" : ""}`} type="button" role="tab" aria-selected={view === "posts"} onClick={(event) => { onRoute(event, activeTopic ? `/topics/${activeTopic.id}/posts` : "/main/posts"); onSetView("posts"); }}><Icon name="list" /><span>Post List</span></button>
@@ -186,6 +196,12 @@ export default function Workspace({
             ))}
           </div>
           ) : null}
+          {manageMode && canManageWorkspace && (
+            <button className="topic-add-floating" type="button" onClick={onRequestTopicCreate}>
+              <Icon name="plus" />
+              <span>토픽 추가</span>
+            </button>
+          )}
         </div>
       )}
       {/* 도움말 모달을 여는 플로팅 버튼입니다. */}

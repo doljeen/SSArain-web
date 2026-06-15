@@ -39,6 +39,7 @@ const getBrainIdFromRoute = (path) => {
 };
 
 const isBrainSearchRoute = (path) => path === "/brains/search";
+const canUseManageMode = (role) => ["ADMIN", "MANAGER", "LEADER"].includes(String(role || "").toUpperCase());
 
 export default function MainPage() {
   // 화면 전체에서 쓰는 데이터입니다. WAS 호출 실패 시 mainMock을 그대로 사용합니다.
@@ -57,6 +58,7 @@ export default function MainPage() {
   const [apiStatus, setApiStatus] = useState("mock");
   const [flying, setFlying] = useState(false);
   const [panning, setPanning] = useState(false);
+  const [manageMode, setManageMode] = useState(false);
   const [openBrainTabs, setOpenBrainTabs] = useState([]);
   const [brainSearch, setBrainSearch] = useState({
     query: "",
@@ -82,6 +84,7 @@ export default function MainPage() {
   const isZoomed = graph.scale >= 1.28;
   const isAuthenticated = authStatus === "authenticated";
   const isBrainSearchView = isBrainSearchRoute(route);
+  const canManageWorkspace = Boolean(isAuthenticated && activeBrain);
 
   const addBrainTab = (brainId) => {
     const brain = pageData.brains.find((item) => String(item.id) === String(brainId));
@@ -272,6 +275,13 @@ export default function MainPage() {
       window.removeEventListener(ROUTE_EVENTS.changed, onRouteChange);
     };
   }, []);
+
+  // 관리자/반장 권한이 아니거나 Brain을 벗어나면 관리모드는 자동으로 해제합니다.
+  useEffect(() => {
+    if (!canManageWorkspace && manageMode) {
+      setManageMode(false);
+    }
+  }, [canManageWorkspace, manageMode]);
 
   // 중앙 허브 주변에 보이는 다른 토픽 묶음의 좌표와 점 개수를 계산합니다.
   const topicClusters = useMemo(() => {
@@ -529,6 +539,11 @@ export default function MainPage() {
   // 오른쪽 패널 접기/펼치기 토글입니다.
   const toggleRight = () => setRightCollapsed((value) => !value);
 
+  // 관리모드의 Topic 추가 버튼은 우선 진입점만 열어두고, 생성 화면은 이후 구현합니다.
+  const requestTopicCreateEntry = () => {
+    showToast("Topic 생성 화면은 다음 단계에서 연결됩니다.");
+  };
+
   // WAS에 Brain 가입 API가 아직 없으므로 버튼 클릭 시 현재 가능한 상태만 안내합니다.
   const requestJoinBrain = (brain) => {
     showToast(`${brain.name} 가입 API가 아직 준비되지 않았습니다.`);
@@ -583,13 +598,17 @@ export default function MainPage() {
         openBrainTabs={openBrainTabs}
         isAuthenticated={isAuthenticated}
         isBrainSearchView={isBrainSearchView}
+        canManageWorkspace={canManageWorkspace}
+        manageMode={manageMode}
         onFocusPoint={focusGraphPoint}
         onJoinBrain={requestJoinBrain}
         onMoveToTopic={moveToTopic}
         onOpenModal={setModal}
+        onRequestTopicCreate={requestTopicCreateEntry}
         onSearchBrains={searchBrains}
         onSelectBrain={selectBrain}
         onCloseBrainTab={closeBrainTab}
+        onToggleManageMode={() => setManageMode((value) => !value)}
         isRightPanelOpen={!rightCollapsed}
         onToggleRight={toggleRight}
         onPointerDown={handlePointerDown}
