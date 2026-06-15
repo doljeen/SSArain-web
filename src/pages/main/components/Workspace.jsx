@@ -11,6 +11,7 @@ export default function Workspace({
   graphFieldRef,
   pageData,
   brainSearch,
+  openBrainTabs,
   topicClusters,
   view,
   isAuthenticated,
@@ -18,6 +19,8 @@ export default function Workspace({
   onRoute,
   onSearchBrains,
   onJoinBrain,
+  onSelectBrain,
+  onCloseBrainTab,
   onMoveToTopic,
   onPointerDown,
   onPointerMove,
@@ -38,9 +41,30 @@ export default function Workspace({
     const formData = new FormData(event.currentTarget);
     onSearchBrains(String(formData.get("brainKeyword") || "").trim(), 0);
   };
+  const hasBrainTabs = isAuthenticated && openBrainTabs.length > 0;
 
   return (
-    <section className="workspace" aria-label="Synapse workspace">
+    <section className={`workspace ${hasBrainTabs ? "has-brain-tabs" : ""}`} aria-label="SSArain workspace">
+      {hasBrainTabs && (
+        <nav className="brain-tab-strip" aria-label="열린 Brain 탭">
+          <div className="brain-tabs" role="tablist">
+            {openBrainTabs.map((brain) => (
+              <button
+                key={brain.id}
+                className={`brain-tab ${String(brain.id) === String(pageData.activeBrainId) ? "is-active" : ""}`}
+                type="button"
+                role="tab"
+                aria-selected={String(brain.id) === String(pageData.activeBrainId)}
+                onClick={(event) => onSelectBrain(event, brain.id)}
+              >
+                <span>{brain.name}</span>
+                <span className="brain-tab-close" role="button" tabIndex={-1} onClick={(event) => onCloseBrainTab(event, brain.id)} aria-label={`${brain.name} 탭 닫기`}>×</span>
+              </button>
+            ))}
+          </div>
+        </nav>
+      )}
+
       {/* 현재 Brain/Topic 경로와 보기 전환, 마이페이지/알림 버튼입니다. */}
       <header className="workspace-header">
         <nav className="breadcrumb" aria-label="현재 위치">

@@ -93,7 +93,7 @@ export default function BrainCreatePage() {
       <header className="brain-create-topbar">
         <button className="brain-create-brand" type="button" onClick={() => moveTo("/main")} aria-label="메인으로 이동">
           <span className="brand-button"><Icon name="brain" /></span>
-          <span>Synapse</span>
+          <span>SSArain</span>
         </button>
         <div className="brain-create-actions">
           <button type="button" onClick={() => moveTo("/main")}>접기</button>

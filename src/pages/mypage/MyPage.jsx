@@ -6,12 +6,6 @@ import { routeTo } from "../../shared/router/routes.js";
 
 const AUTH_STATE_KEY = "ssarain-authenticated";
 
-const fallbackUser = {
-  name: "홍길동",
-  email: "test@example.com",
-  role: "USER"
-};
-
 const activitySections = [
   {
     id: "nodes",
@@ -55,7 +49,7 @@ const roleLabel = (role) => ({
 
 export default function MyPage() {
   // WAS /user 응답으로 채워지는 사용자 프로필 정보입니다.
-  const [user, setUser] = useState(fallbackUser);
+  const [user, setUser] = useState(null);
 
   // 비밀번호 변경 폼 상태입니다. 현재 WAS 변경 API가 없어 화면 검증까지만 처리합니다.
   const [passwordForm, setPasswordForm] = useState({
@@ -72,6 +66,9 @@ export default function MyPage() {
   };
 
   const selectedActivity = activitySections.find((section) => section.id === activeActivity) || activitySections[0];
+  const displayName = user?.name || "프로필 불러오는 중";
+  const displayEmail = user?.email || "계정 정보를 확인하고 있습니다.";
+  const displayRole = user ? roleLabel(user.role) : "확인 중";
 
   // WAS 로그아웃 후 인증 상태를 지우고 게스트 메인으로 이동합니다.
   const logout = async () => {
@@ -141,7 +138,7 @@ export default function MyPage() {
       <header className="mypage-topbar">
         <button className="mypage-brand" type="button" onClick={() => moveTo("/main")} aria-label="메인으로 이동">
           <span className="brand-button"><Icon name="brain" /></span>
-          <span>Synapse</span>
+          <span>SSArain</span>
         </button>
         <nav className="mypage-nav" aria-label="마이페이지 이동">
           <button type="button" onClick={() => moveTo("/main")}>메인</button>
@@ -159,10 +156,10 @@ export default function MyPage() {
           </div>
           <div className="profile-copy">
             <p className="profile-kicker">MY PAGE</p>
-            <h1 id="profile-heading">{user.name || fallbackUser.name}</h1>
-            <p className="profile-email">{user.email || fallbackUser.email}</p>
+            <h1 id="profile-heading">{displayName}</h1>
+            <p className="profile-email">{displayEmail}</p>
             <div className="profile-meta">
-              <span>{roleLabel(user.role || fallbackUser.role)}</span>
+              <span>{displayRole}</span>
               <span>{isLoading ? "불러오는 중" : "프로필 정보"}</span>
             </div>
           </div>
@@ -243,7 +240,7 @@ export default function MyPage() {
             <dl>
               <div>
                 <dt>권한</dt>
-                <dd>{roleLabel(user.role || fallbackUser.role)}</dd>
+                <dd>{displayRole}</dd>
               </div>
             </dl>
           </aside>

@@ -190,7 +190,7 @@ export default function AuthPage({ mode }) {
       <header className="auth-header">
         <button className="auth-brand" type="button" onClick={() => moveTo("/main")} aria-label="메인으로 이동">
           <span className="brand-button"><Icon name="brain" /></span>
-          <span>Synapse</span>
+          <span>SSArain</span>
         </button>
         <div className="auth-header-actions">
           <button className={!isSignup ? "is-active" : ""} type="button" onClick={() => moveTo("/login")}>로그인</button>
@@ -211,7 +211,7 @@ export default function AuthPage({ mode }) {
           <div className={`auth-field-row ${isSignup ? "" : "is-single"}`}>
             <label>
               <span>이메일</span>
-              <input name="email" type="email" placeholder="admin@synapse.io" value={form.email} onChange={updateField} required />
+              <input name="email" type="email" placeholder="admin@ssarain.io" value={form.email} onChange={updateField} required />
             </label>
             {isSignup && <button className="auth-side-button" type="button" onClick={requestEmailCode} disabled={isSubmitting}>인증번호 전송</button>}
           </div>

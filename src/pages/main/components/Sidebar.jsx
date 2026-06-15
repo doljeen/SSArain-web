@@ -11,17 +11,15 @@ export default function Sidebar({
   onRoute,
   onSelectBrain,
   onMoveToTopic,
-  onToggleLeft,
   onOpenModal,
   onLogout
 }) {
   return (
     <aside className="sidebar" aria-label="Brain navigation">
-      {/* 브랜드 영역과 왼쪽 패널 접기 버튼입니다. */}
+      {/* 브랜드 영역입니다. 왼쪽 사이드바는 항상 고정해서 Brain 탐색 기준을 유지합니다. */}
       <header className="brand-bar">
         <button className="brand-button" type="button" onClick={(event) => onRoute(event, "/main")} aria-label="홈으로 이동"><Icon name="brain" /></button>
-        <button className="brand-name" type="button" onClick={(event) => onRoute(event, "/main")}>Synapse</button>
-        <button className="collapse-button" type="button" onClick={onToggleLeft} aria-label="왼쪽 메뉴 접기">접기</button>
+        <button className="brand-name" type="button" onClick={(event) => onRoute(event, "/main")}>SSArain</button>
       </header>
 
       {!isAuthenticated ? (
@@ -83,7 +81,7 @@ export default function Sidebar({
       {isAuthenticated && <footer className="user-footer">
         <button className="user-profile" type="button" onClick={(event) => onRoute(event, "/mypage")}>
           <span className="user-avatar"><Icon name="user" /></span>
-          <span><strong>{pageData.user.name || "Admin User"}</strong><small>{pageData.user.email || "admin@synapse.io"}</small></span>
+          <span><strong>{pageData.user.name || "Admin User"}</strong><small>{pageData.user.email || "admin@ssarain.io"}</small></span>
         </button>
         <div className="footer-actions">
           <button type="button" onClick={onLogout}>로그아웃</button>

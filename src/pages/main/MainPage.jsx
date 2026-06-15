@@ -46,7 +46,6 @@ export default function MainPage() {
 
   // 현재 route와 좌우 패널, 보기 모드, 그래프 카메라 상태를 관리합니다.
   const [route, setRoute] = useState(getCurrentRoute);
-  const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [view, setView] = useState("synapse");
   const [graph, setGraph] = useState({ x: 0, y: 0, scale: 1, tilt: 0 });
@@ -58,6 +57,7 @@ export default function MainPage() {
   const [apiStatus, setApiStatus] = useState("mock");
   const [flying, setFlying] = useState(false);
   const [panning, setPanning] = useState(false);
+  const [openBrainTabs, setOpenBrainTabs] = useState([]);
   const [brainSearch, setBrainSearch] = useState({
     query: "",
     results: [],
@@ -82,6 +82,16 @@ export default function MainPage() {
   const isZoomed = graph.scale >= 1.28;
   const isAuthenticated = authStatus === "authenticated";
   const isBrainSearchView = isBrainSearchRoute(route);
+
+  const addBrainTab = (brainId) => {
+    const brain = pageData.brains.find((item) => String(item.id) === String(brainId));
+    if (!brain) return;
+
+    setOpenBrainTabs((current) => {
+      if (current.some((item) => String(item.id) === String(brain.id))) return current;
+      return [...current, brain];
+    });
+  };
 
   // BrainTopic 상세 API에서 현재 Topic에 연결된 Node 목록을 가져옵니다.
   const fetchTopicNodes = async (brainId, topicId) => {
@@ -380,10 +390,44 @@ export default function MainPage() {
   };
 
   // Brain 클릭 시 왼쪽 목록의 activeBrainId를 바꾸고 route를 이동합니다.
-  const selectBrain = (event, brainId) => {
+  const selectBrain = (event, brainId, options = {}) => {
+    if (options.openTab !== false) {
+      addBrainTab(brainId);
+    }
     setPageData((current) => ({ ...current, activeBrainId: brainId }));
     handleRouteClick(event, `/brains/${brainId}`);
     loadBrainWorkspace(brainId);
+  };
+
+  // Chrome 탭처럼 열린 Brain 탭을 닫습니다. 현재 탭을 닫으면 옆 탭으로 이동하고, 없으면 빈 메인으로 돌아갑니다.
+  const closeBrainTab = (event, brainId) => {
+    event.stopPropagation();
+
+    setOpenBrainTabs((current) => {
+      const index = current.findIndex((brain) => String(brain.id) === String(brainId));
+      const nextTabs = current.filter((brain) => String(brain.id) !== String(brainId));
+
+      if (String(pageData.activeBrainId) === String(brainId)) {
+        const nextBrain = nextTabs[index] || nextTabs[index - 1] || null;
+
+        if (nextBrain) {
+          setPageData((currentPageData) => ({ ...currentPageData, activeBrainId: nextBrain.id }));
+          routeTo(`/brains/${nextBrain.id}`);
+          loadBrainWorkspace(nextBrain.id);
+        } else {
+          setPageData((currentPageData) => ({
+            ...currentPageData,
+            activeBrainId: null,
+            activeTopicId: null,
+            topics: [],
+            nodes: []
+          }));
+          routeTo("/main");
+        }
+      }
+
+      return nextTabs;
+    });
   };
 
   // Topic 클릭 시 중앙 내용을 바꾸지 않고 그래프 카메라만 해당 토픽 방향으로 이동합니다.
@@ -482,8 +526,7 @@ export default function MainPage() {
     isZoomed ? "is-zoomed" : ""
   ].filter(Boolean).join(" ");
 
-  // 좌우 패널 접기/펼치기 토글입니다.
-  const toggleLeft = () => setLeftCollapsed((value) => !value);
+  // 오른쪽 패널 접기/펼치기 토글입니다.
   const toggleRight = () => setRightCollapsed((value) => !value);
 
   // WAS에 Brain 가입 API가 아직 없으므로 버튼 클릭 시 현재 가능한 상태만 안내합니다.
@@ -511,7 +554,7 @@ export default function MainPage() {
   };
 
   return (
-    <main className={`main-shell ${leftCollapsed ? "is-left-collapsed" : ""} ${rightCollapsed ? "is-right-collapsed" : ""}`} aria-label="Synapse main page">
+    <main className={`main-shell ${rightCollapsed ? "is-right-collapsed" : ""}`} aria-label="SSArain main page">
       {/* 왼쪽 Brain/Topic 탐색 영역입니다. */}
       <Sidebar
         activeBrain={activeBrain}
@@ -524,11 +567,7 @@ export default function MainPage() {
         onLogout={logout}
         onRoute={handleRouteClick}
         onSelectBrain={selectBrain}
-        onToggleLeft={toggleLeft}
       />
-
-      {/* 왼쪽 패널이 접혔을 때 다시 펼치는 외곽 버튼입니다. */}
-      <button className="edge-toggle left-edge" type="button" onClick={toggleLeft} aria-label="왼쪽 메뉴 펼치기">로고</button>
 
       {/* 중앙 Synapse 그래프와 Post List 전환 영역입니다. */}
       <Workspace
@@ -541,6 +580,7 @@ export default function MainPage() {
         topicClusters={topicClusters}
         view={view}
         brainSearch={brainSearch}
+        openBrainTabs={openBrainTabs}
         isAuthenticated={isAuthenticated}
         isBrainSearchView={isBrainSearchView}
         onFocusPoint={focusGraphPoint}
@@ -548,6 +588,8 @@ export default function MainPage() {
         onMoveToTopic={moveToTopic}
         onOpenModal={setModal}
         onSearchBrains={searchBrains}
+        onSelectBrain={selectBrain}
+        onCloseBrainTab={closeBrainTab}
         isRightPanelOpen={!rightCollapsed}
         onToggleRight={toggleRight}
         onPointerDown={handlePointerDown}

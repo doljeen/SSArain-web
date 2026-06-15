@@ -35,7 +35,7 @@ export const createModalCopy = ({ activeTopic, user }) => ({
     endpoint: endpoints.users.me,
     fields: [
       `이름: ${user.name || "Admin User"}`,
-      `이메일: ${user.email || "admin@synapse.io"}`,
+      `이메일: ${user.email || "admin@ssarain.io"}`,
       `권한: ${user.role || "USER"}`
     ]
   },
