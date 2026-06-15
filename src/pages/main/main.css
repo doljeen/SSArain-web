@@ -41,7 +41,6 @@ button {
   flex-direction: column;
   height: 100vh;
   background: #ffffff;
-  border-left: 1px solid #edf2f8;
   border-right: 1px solid #dfe7f2;
 }
 
@@ -56,30 +55,55 @@ button {
   padding: 0 28px;
   display: flex;
   align-items: center;
-  gap: 12px;
   border-bottom: 1px solid #edf2f8;
+}
+
+.sidebar-brand {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: #171c28;
+  font-size: 17px;
+  font-weight: 850;
+  line-height: 1;
 }
 
 .brand-button {
   width: 34px;
   height: 34px;
-  display: grid;
+  flex: 0 0 34px;
+  padding: 0;
+  display: inline-grid;
   place-items: center;
   border-radius: 10px;
   background: var(--color-purple-strong);
   color: #ffffff;
+  line-height: 0;
+  overflow: hidden;
   box-shadow: 0 6px 16px rgba(101, 87, 255, 0.28);
+}
+
+.brand-button .icon-wrap {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
 }
 
 .brand-button .icon {
   width: 20px;
   height: 20px;
+  display: block;
 }
 
-.brand-name {
-  color: #171c28;
-  font-size: 17px;
-  font-weight: 850;
+.brand-button .icon path,
+.brand-button .icon circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .collapse-button {

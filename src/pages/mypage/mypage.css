@@ -10,7 +10,7 @@
 
 .mypage-topbar {
   height: 68px;
-  padding: 0 32px;
+  padding: 0 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -20,12 +20,14 @@
 }
 
 .mypage-brand {
+  height: 34px;
   display: inline-flex;
   align-items: center;
   gap: 12px;
   color: #171c28;
   font-size: 17px;
   font-weight: 850;
+  line-height: 1;
 }
 
 .mypage-nav {

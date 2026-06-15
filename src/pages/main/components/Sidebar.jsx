@@ -18,8 +18,10 @@ export default function Sidebar({
     <aside className="sidebar" aria-label="Brain navigation">
       {/* 브랜드 영역입니다. 왼쪽 사이드바는 항상 고정해서 Brain 탐색 기준을 유지합니다. */}
       <header className="brand-bar">
-        <button className="brand-button" type="button" onClick={(event) => onRoute(event, "/main")} aria-label="홈으로 이동"><Icon name="brain" /></button>
-        <button className="brand-name" type="button" onClick={(event) => onRoute(event, "/main")}>SSArain</button>
+        <button className="sidebar-brand" type="button" onClick={(event) => onRoute(event, "/main")} aria-label="홈으로 이동">
+          <span className="brand-button"><Icon name="brain" /></span>
+          <span>SSArain</span>
+        </button>
       </header>
 
       {!isAuthenticated ? (

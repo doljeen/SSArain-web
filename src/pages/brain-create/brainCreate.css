@@ -8,7 +8,7 @@
 
 .brain-create-topbar {
   height: 68px;
-  padding: 0 32px;
+  padding: 0 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -23,10 +23,12 @@
 }
 
 .brain-create-brand {
+  height: 34px;
   gap: 12px;
   color: #171c28;
   font-size: 17px;
   font-weight: 850;
+  line-height: 1;
 }
 
 .brain-create-actions {

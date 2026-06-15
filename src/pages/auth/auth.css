@@ -25,10 +25,12 @@
 }
 
 .auth-brand {
+  height: 34px;
   gap: 12px;
   color: #171c28;
   font-size: 17px;
   font-weight: 850;
+  line-height: 1;
 }
 
 .auth-header-actions {
