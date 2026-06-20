@@ -54,7 +54,6 @@ export default function Sidebar({
       <section className="topics-card" aria-labelledby="topics-heading">
         <div className="topics-header">
           <h2 className="section-heading" id="topics-heading">TOPICS</h2>
-          <button className="icon-button" type="button" aria-label="토픽 추가" data-endpoint={endpoints.topics.create(activeTopic?.id)} onClick={(event) => { onRoute(event, "/topics/new"); onOpenModal("createTopic"); }}><Icon name="plus" /></button>
         </div>
         <div className="topic-tree">
           {pageData.topics.map((topic) => (

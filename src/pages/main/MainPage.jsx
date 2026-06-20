@@ -7,25 +7,34 @@ import { getCurrentRoute, routeTo, ROUTE_EVENTS, syncDocumentRoute } from "../..
 import InsightsPanel from "./components/InsightsPanel.jsx";
 import MainModal from "./components/MainModal.jsx";
 import Sidebar from "./components/Sidebar.jsx";
+import TopicManagerPanel from "./components/TopicManagerPanel.jsx";
 import Workspace from "./components/Workspace.jsx";
 import { clusterPositions } from "./config/graphConfig.js";
 import { createModalCopy } from "./config/modalConfig.js";
-import { buildTopicTree, clone, flattenTopics, normalizeBrain, normalizeNodes } from "./config/mainUtils.js";
+import { buildTopicTree, clone, flattenTopics, normalizeBrain, normalizeNodes, normalizeUserInfo } from "./config/mainUtils.js";
 
 const CREATED_WORKSPACE_KEY = "ssarain-created-workspace";
 const AUTH_STATE_KEY = "ssarain-authenticated";
 const MIN_GRAPH_SCALE = 0.72;
 const MAX_GRAPH_SCALE = 2.2;
-const MAX_GRAPH_PAN_X = 620;
-const MAX_GRAPH_PAN_Y = 420;
+const MAX_GRAPH_PAN_X = 3200;
+const MAX_GRAPH_PAN_Y = 2200;
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const clampGraph = (graphState) => ({
   ...graphState,
   scale: clamp(graphState.scale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE),
-  x: clamp(graphState.x, -MAX_GRAPH_PAN_X, MAX_GRAPH_PAN_X),
-  y: clamp(graphState.y, -MAX_GRAPH_PAN_Y, MAX_GRAPH_PAN_Y)
+  x: clamp(
+    graphState.x,
+    -(MAX_GRAPH_PAN_X + ((clamp(graphState.scale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE) - 1) * 2400)),
+    MAX_GRAPH_PAN_X + ((clamp(graphState.scale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE) - 1) * 2400)
+  ),
+  y: clamp(
+    graphState.y,
+    -(MAX_GRAPH_PAN_Y + ((clamp(graphState.scale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE) - 1) * 1700)),
+    MAX_GRAPH_PAN_Y + ((clamp(graphState.scale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE) - 1) * 1700)
+  )
 });
 
 const getTopicIdFromRoute = (path) => {
@@ -40,6 +49,90 @@ const getBrainIdFromRoute = (path) => {
 
 const isBrainSearchRoute = (path) => path === "/brains/search";
 const canUseManageMode = (role) => ["ADMIN", "MANAGER", "LEADER"].includes(String(role || "").toUpperCase());
+const isTopicUsing = (value) => value === true || value === "true" || value === 1 || value === "1";
+
+const mapTopicTree = (topics, mapper) => topics.map((topic) => {
+  const nextTopic = mapper(topic);
+  return { ...nextTopic, children: mapTopicTree(nextTopic.children || [], mapper) };
+});
+
+const setTopicUseState = (topics, topicId, isUsing) => topics.map((topic) => ({
+  ...topic,
+  isUsing: String(topic.id) === String(topicId) ? isUsing : isTopicUsing(topic.isUsing),
+  children: setTopicUseState(topic.children || [], topicId, isUsing)
+}));
+
+const findTopicPathIds = (topics, topicId, path = []) => {
+  for (const topic of topics) {
+    const nextPath = [...path, String(topic.id)];
+    if (String(topic.id) === String(topicId)) return nextPath;
+    const childPath = findTopicPathIds(topic.children || [], topicId, nextPath);
+    if (childPath.length) return childPath;
+  }
+  return [];
+};
+
+const setTopicUseWithAncestors = (topics, topicId, isUsing) => {
+  if (!isUsing) return setTopicUseState(topics, topicId, false);
+
+  const visiblePath = new Set(findTopicPathIds(topics, topicId));
+  return topics.map((topic) => ({
+    ...topic,
+    isUsing: visiblePath.has(String(topic.id)) || isTopicUsing(topic.isUsing),
+    children: setTopicUseWithAncestors(topic.children || [], topicId, true)
+  }));
+};
+
+const addChildTopic = (topics, parentId, childTopic) => topics.map((topic) => (
+  String(topic.id) === String(parentId)
+    ? { ...topic, children: [...(topic.children || []), childTopic] }
+    : { ...topic, children: addChildTopic(topic.children || [], parentId, childTopic) }
+));
+
+const removeTopicById = (topics, topicId) => topics
+  .filter((topic) => String(topic.id) !== String(topicId))
+  .map((topic) => ({ ...topic, children: removeTopicById(topic.children || [], topicId) }));
+
+const topicUseMap = (topics, map = new Map()) => {
+  topics.forEach((topic) => {
+    map.set(String(topic.id), isTopicUsing(topic.isUsing));
+    topicUseMap(topic.children || [], map);
+  });
+  return map;
+};
+
+const applyTopicUseMap = (topics, useMap) => topics.map((topic) => ({
+  ...topic,
+  isUsing: useMap.has(String(topic.id)) ? useMap.get(String(topic.id)) : isTopicUsing(topic.isUsing),
+  children: applyTopicUseMap(topic.children || [], useMap)
+}));
+
+const applyVisibleTopicIds = (topics, visibleIds) => topics.map((topic) => ({
+  ...topic,
+  isUsing: visibleIds.has(String(topic.id)),
+  children: applyVisibleTopicIds(topic.children || [], visibleIds)
+}));
+
+const collectTopicIds = (topics, ids = new Set()) => {
+  topics.forEach((topic) => {
+    ids.add(String(topic.id));
+    collectTopicIds(topic.children || [], ids);
+  });
+  return ids;
+};
+
+const markAncestorUsing = (topics) => topics.map((topic) => {
+  const children = markAncestorUsing(topic.children || []);
+  const hasVisibleChild = children.some((child) => child.isUsing);
+  return { ...topic, children, isUsing: isTopicUsing(topic.isUsing) || hasVisibleChild };
+});
+
+const visibleTopicTree = (topics) => topics.reduce((visible, topic) => {
+  const children = visibleTopicTree(topic.children || []);
+  const isUsing = isTopicUsing(topic.isUsing);
+  if (isUsing || children.length) visible.push({ ...topic, isUsing: isUsing || children.length > 0, children });
+  return visible;
+}, []);
 
 export default function MainPage() {
   // 화면 전체에서 쓰는 데이터입니다. WAS 호출 실패 시 mainMock을 그대로 사용합니다.
@@ -59,6 +152,8 @@ export default function MainPage() {
   const [flying, setFlying] = useState(false);
   const [panning, setPanning] = useState(false);
   const [manageMode, setManageMode] = useState(false);
+  const [topicPanelMode, setTopicPanelMode] = useState(null);
+  const [topicCatalog, setTopicCatalog] = useState([]);
   const [openBrainTabs, setOpenBrainTabs] = useState([]);
   const [brainSearch, setBrainSearch] = useState({
     query: "",
@@ -76,6 +171,8 @@ export default function MainPage() {
   const panSession = useRef(null);
   const suppressNextClick = useRef(false);
   const flightTimer = useRef(null);
+  const topicCatalogByBrain = useRef({});
+  const commonTopicCatalog = useRef([]);
 
   // 트리 구조의 토픽을 펼쳐서 현재 선택된 Brain/Topic을 계산합니다.
   const topicsFlat = useMemo(() => flattenTopics(pageData.topics), [pageData.topics]);
@@ -86,6 +183,32 @@ export default function MainPage() {
   const isBrainSearchView = isBrainSearchRoute(route);
   const canManageWorkspace = Boolean(isAuthenticated && activeBrain);
 
+  const rememberTopicCatalog = (brainId, catalog) => {
+    if (!brainId) return;
+    topicCatalogByBrain.current[String(brainId)] = catalog;
+  };
+
+  const mergeCommonTopicsWithBrainUse = (commonTopics, brainTopics) => {
+    const visibleIds = collectTopicIds(visibleTopicTree(brainTopics));
+    return markAncestorUsing(applyVisibleTopicIds(commonTopics, visibleIds));
+  };
+
+  const loadCommonTopicCatalog = async () => {
+    if (commonTopicCatalog.current.length) return clone(commonTopicCatalog.current);
+
+    const topics = await apiGet(endpoints.topics.list());
+    const catalog = markAncestorUsing(buildTopicTree(topics || []));
+    commonTopicCatalog.current = catalog;
+    return clone(catalog);
+  };
+
+  const restoreBrainTopicCatalog = (brainId, topics, options = {}) => {
+    const cachedCatalog = topicCatalogByBrain.current[String(brainId)];
+    if (cachedCatalog && options.preferCached !== false) return markAncestorUsing(clone(cachedCatalog));
+    if (!cachedCatalog) return markAncestorUsing(topics);
+    return markAncestorUsing(applyTopicUseMap(topics, topicUseMap(cachedCatalog)));
+  };
+
   const addBrainTab = (brainId) => {
     const brain = pageData.brains.find((item) => String(item.id) === String(brainId));
     if (!brain) return;
@@ -94,6 +217,42 @@ export default function MainPage() {
       if (current.some((item) => String(item.id) === String(brain.id))) return current;
       return [...current, brain];
     });
+  };
+
+  const syncVisibleTopics = (catalog, preferredTopicId = null) => {
+    const visibleTopics = visibleTopicTree(catalog);
+    const visibleFlat = flattenTopics(visibleTopics);
+
+    setPageData((current) => ({
+      ...current,
+      topics: visibleTopics,
+      activeTopicId: preferredTopicId && visibleFlat.some((topic) => String(topic.id) === String(preferredTopicId))
+        ? String(preferredTopicId)
+        : visibleFlat.some((topic) => String(topic.id) === String(current.activeTopicId))
+        ? current.activeTopicId
+        : (visibleFlat[0] ? String(visibleFlat[0].id) : null),
+      nodes: visibleFlat.length ? current.nodes : []
+    }));
+  };
+
+  const loadTopicCatalog = async () => {
+    if (!activeBrain) return topicCatalog;
+
+    try {
+      const commonCatalog = await loadCommonTopicCatalog();
+      const brainDetail = await apiGet(endpoints.brains.topics(activeBrain.id));
+      const brainCatalog = restoreBrainTopicCatalog(activeBrain.id, buildTopicTree(brainDetail?.topics || []), { preferCached: false });
+      const catalog = restoreBrainTopicCatalog(activeBrain.id, mergeCommonTopicsWithBrainUse(commonCatalog, brainCatalog), { preferCached: false });
+      setTopicCatalog(catalog);
+      rememberTopicCatalog(activeBrain.id, catalog);
+      syncVisibleTopics(catalog);
+      return catalog;
+    } catch (error) {
+      const fallback = topicCatalog.length ? topicCatalog : pageData.topics;
+      setTopicCatalog(fallback);
+      showToast(`공통 Topic 목록을 불러오지 못했습니다 · ${error.message}`);
+      return fallback;
+    }
   };
 
   // BrainTopic 상세 API에서 현재 Topic에 연결된 Node 목록을 가져옵니다.
@@ -114,8 +273,9 @@ export default function MainPage() {
 
     try {
       const detail = await apiGet(endpoints.brains.topics(brainId));
-      const topics = buildTopicTree(detail?.topics || []);
-      const flatTopics = flattenTopics(topics);
+      const topics = restoreBrainTopicCatalog(brainId, buildTopicTree(detail?.topics || []));
+      const visibleTopics = visibleTopicTree(topics);
+      const flatTopics = flattenTopics(visibleTopics);
       const selectedTopic = flatTopics.find((topic) => String(topic.id) === String(requestedTopicId)) || flatTopics[0] || null;
       const nodes = selectedTopic ? await fetchTopicNodes(brainId, selectedTopic.id) : [];
       const normalizedBrain = normalizeBrain({ ...detail, topics: detail?.topics || [] });
@@ -125,10 +285,12 @@ export default function MainPage() {
         activeBrainId: String(normalizedBrain.id),
         activeTopicId: selectedTopic ? String(selectedTopic.id) : null,
         brains: current.brains.map((brain) => String(brain.id) === String(normalizedBrain.id) ? normalizedBrain : brain),
-        topics,
+        topics: visibleTopics,
         nodes
       }));
       setApiStatus("was");
+      setTopicCatalog(topics);
+      rememberTopicCatalog(brainId, topics);
     } catch (error) {
       showToast(`Brain 정보를 불러오지 못했습니다 · ${error.message}`);
     }
@@ -157,18 +319,21 @@ export default function MainPage() {
       const selectedBrain = brains.find((brain) => String(brain.id) === String(routedBrainId)) || brains[0] || null;
 
       let topics = [];
+      let catalogTopics = [];
       let nodes = [];
       let activeTopicId = null;
       let nextBrains = brains;
 
       if (selectedBrain) {
         const brainDetail = await apiGet(endpoints.brains.topics(selectedBrain.id));
-        topics = buildTopicTree(brainDetail?.topics || []);
-        const flatTopics = flattenTopics(topics);
+        catalogTopics = restoreBrainTopicCatalog(selectedBrain.id, buildTopicTree(brainDetail?.topics || []));
+        const visibleTopics = visibleTopicTree(catalogTopics);
+        const flatTopics = flattenTopics(visibleTopics);
         const routedTopicId = getTopicIdFromRoute(route);
         const selectedTopic = flatTopics.find((topic) => String(topic.id) === String(routedTopicId)) || flatTopics[0] || null;
         activeTopicId = selectedTopic ? String(selectedTopic.id) : null;
         nodes = selectedTopic ? await fetchTopicNodes(selectedBrain.id, selectedTopic.id) : [];
+        topics = visibleTopics;
 
         const detailBrain = normalizeBrain({ ...brainDetail, topics: brainDetail?.topics || [] });
         nextBrains = brains.map((brain) => String(brain.id) === String(detailBrain.id) ? detailBrain : brain);
@@ -176,13 +341,12 @@ export default function MainPage() {
 
       setAuthStatus("authenticated");
       setApiStatus("was");
+      setTopicCatalog(catalogTopics);
+      if (selectedBrain) rememberTopicCatalog(selectedBrain.id, catalogTopics);
+      const normalizedUser = normalizeUserInfo(userInfo);
       setPageData((current) => ({
         ...current,
-        user: {
-          name: userInfo.name,
-          email: userInfo.email,
-          role: userInfo.role
-        },
+        user: normalizedUser,
         activeBrainId: selectedBrain ? String(selectedBrain.id) : null,
         activeTopicId,
         brains: nextBrains,
@@ -540,8 +704,76 @@ export default function MainPage() {
   const toggleRight = () => setRightCollapsed((value) => !value);
 
   // 관리모드의 Topic 추가 버튼은 우선 진입점만 열어두고, 생성 화면은 이후 구현합니다.
-  const requestTopicCreateEntry = () => {
-    showToast("Topic 생성 화면은 다음 단계에서 연결됩니다.");
+  const openTopicPanel = async (mode) => {
+    await loadTopicCatalog();
+    setTopicPanelMode(mode);
+  };
+
+  const createTopicFromPanel = async (parentTopicId, name) => {
+    try {
+      const createdTopic = await apiPost(endpoints.topics.create(parentTopicId), { name });
+      const nextTopic = {
+        id: String(createdTopic.tid),
+        btid: null,
+        pid: createdTopic.pid == null ? String(parentTopicId) : String(createdTopic.pid),
+        name: createdTopic.name || name,
+        isUsing: true,
+        children: []
+      };
+
+      if (activeBrain && createdTopic?.tid != null) {
+        try {
+          await apiPost(endpoints.brains.registerTopics(activeBrain.id), { topics: [createdTopic.tid] });
+        } catch (error) {
+          showToast(`Topic은 생성됐지만 Brain 등록은 실패했습니다 · ${error.message}`);
+        }
+      }
+
+      setTopicCatalog((current) => {
+        const nextCatalog = markAncestorUsing(addChildTopic(current, parentTopicId, nextTopic));
+        commonTopicCatalog.current = markAncestorUsing(addChildTopic(commonTopicCatalog.current, parentTopicId, { ...nextTopic, isUsing: false }));
+        rememberTopicCatalog(activeBrain?.id, nextCatalog);
+        syncVisibleTopics(nextCatalog);
+        return nextCatalog;
+      });
+      showToast(`${nextTopic.name} Topic 생성 완료`);
+    } catch (error) {
+      showToast(`Topic 생성 실패 · ${error.message}`);
+    }
+  };
+
+  const toggleTopicUse = async (topic) => {
+    const nextState = !isTopicUsing(topic.isUsing);
+    const topicPathIds = nextState ? findTopicPathIds(topicCatalog, topic.id) : [String(topic.id)];
+
+    setTopicCatalog((current) => {
+      const nextCatalog = markAncestorUsing(setTopicUseWithAncestors(current, topic.id, nextState));
+      rememberTopicCatalog(activeBrain?.id, nextCatalog);
+      syncVisibleTopics(nextCatalog, nextState ? topic.id : null);
+      return nextCatalog;
+    });
+
+    if (nextState && activeBrain) {
+      try {
+        await apiPost(endpoints.brains.registerTopics(activeBrain.id), { topics: topicPathIds.map(Number) });
+      } catch (error) {
+        showToast(`화면에는 표시했습니다 · Brain 등록 API 확인 필요`);
+        return;
+      }
+    }
+
+    showToast(nextState ? `${topic.name} Topic 표시` : `${topic.name} Topic 숨김`);
+  };
+
+  const deleteTopicFromPanel = (topic) => {
+    setTopicCatalog((current) => {
+      const nextCatalog = removeTopicById(current, topic.id);
+      commonTopicCatalog.current = removeTopicById(commonTopicCatalog.current, topic.id);
+      rememberTopicCatalog(activeBrain?.id, nextCatalog);
+      syncVisibleTopics(nextCatalog);
+      return nextCatalog;
+    });
+    showToast(`${topic.name} Topic 삭제 UI 반영 · WAS 삭제 API 연결 대기`);
   };
 
   // WAS에 Brain 가입 API가 아직 없으므로 버튼 클릭 시 현재 가능한 상태만 안내합니다.
@@ -604,7 +836,7 @@ export default function MainPage() {
         onJoinBrain={requestJoinBrain}
         onMoveToTopic={moveToTopic}
         onOpenModal={setModal}
-        onRequestTopicCreate={requestTopicCreateEntry}
+        onOpenTopicPanel={openTopicPanel}
         onSearchBrains={searchBrains}
         onSelectBrain={selectBrain}
         onCloseBrainTab={closeBrainTab}
@@ -633,6 +865,16 @@ export default function MainPage() {
       {/* 전역 피드백 UI입니다. 알림창은 헤더 버튼에서 열고 닫습니다. */}
       {toast && <div className="toast" role="status">{toast}</div>}
       {modal && <MainModal copy={modalCopy[modal]} onClose={() => setModal(null)} onConfirm={confirmModal} />}
+      {topicPanelMode && (
+        <TopicManagerPanel
+          mode={topicPanelMode}
+          topics={topicCatalog}
+          onClose={() => setTopicPanelMode(null)}
+          onCreateTopic={createTopicFromPanel}
+          onDeleteTopic={deleteTopicFromPanel}
+          onToggleTopicUse={toggleTopicUse}
+        />
+      )}
     </main>
   );
 }

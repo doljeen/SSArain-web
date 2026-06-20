@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiPost } from "../../api/client.js";
 import { endpoints } from "../../api/endpoints.js";
+import { normalizeUserInfo } from "../main/config/mainUtils.js";
 import Icon from "../../shared/icons/Icon.jsx";
 import { routeTo } from "../../shared/router/routes.js";
 
@@ -65,7 +66,16 @@ export default function MyPage() {
     routeTo(path);
   };
 
-  const selectedActivity = activitySections.find((section) => section.id === activeActivity) || activitySections[0];
+  const userSummary = user?.summary || {};
+  const resolvedActivitySections = activitySections.map((section) => ({
+    ...section,
+    count: {
+      nodes: userSummary.nodeCount,
+      comments: userSummary.commentCount,
+      thumbs: userSummary.likeCount
+    }[section.id] ?? section.count
+  }));
+  const selectedActivity = resolvedActivitySections.find((section) => section.id === activeActivity) || resolvedActivitySections[0];
   const displayName = user?.name || "프로필 불러오는 중";
   const displayEmail = user?.email || "계정 정보를 확인하고 있습니다.";
   const displayRole = user ? roleLabel(user.role) : "확인 중";
@@ -96,7 +106,7 @@ export default function MyPage() {
         const userInfo = await apiGet(endpoints.users.me);
         if (userInfo) {
           sessionStorage.setItem(AUTH_STATE_KEY, "true");
-          setUser(userInfo);
+          setUser(normalizeUserInfo(userInfo));
         }
       } catch (error) {
         sessionStorage.removeItem(AUTH_STATE_KEY);
@@ -174,7 +184,7 @@ export default function MyPage() {
                 <h2 id="activity-heading">내 활동</h2>
               </div>
               <div className="activity-tabs" role="tablist" aria-label="내 활동 분류">
-                {activitySections.map((section) => (
+                {resolvedActivitySections.map((section) => (
                   <button
                     key={section.id}
                     className={section.id === activeActivity ? "is-active" : ""}
@@ -190,7 +200,7 @@ export default function MyPage() {
             </div>
 
             <div className="activity-summary-row">
-              {activitySections.map((section) => (
+              {resolvedActivitySections.map((section) => (
                 <button key={section.id} className={`activity-summary-card ${section.id === activeActivity ? "is-active" : ""}`} type="button" onClick={() => setActiveActivity(section.id)}>
                   <span><Icon name={section.icon} /></span>
                   <strong>{section.count}</strong>

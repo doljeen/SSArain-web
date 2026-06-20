@@ -1,6 +1,117 @@
-import { endpoints } from "../../../api/endpoints.js";
 import Icon from "../../../shared/icons/Icon.jsx";
-import { graphNodes } from "../config/graphConfig.js";
+
+const lineStyle = (fromX, fromY, toX, toY) => {
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  return {
+    "--from-x": `${fromX}px`,
+    "--from-y": `${fromY}px`,
+    "--line-length": `${Math.sqrt((dx * dx) + (dy * dy))}px`,
+    "--line-angle": `${Math.atan2(dy, dx) * (180 / Math.PI)}deg`
+  };
+};
+
+const rootScatterPositions = [
+  { x: -620, y: -270 },
+  { x: 650, y: 260 },
+  { x: 0, y: 0 },
+  { x: -300, y: 390 },
+  { x: 410, y: -385 },
+  { x: -820, y: 150 },
+  { x: 850, y: -155 },
+  { x: -910, y: -420 },
+  { x: 930, y: 440 }
+];
+
+const findTopicPath = (topics, topicId, path = []) => {
+  for (const topic of topics) {
+    const nextPath = [...path, topic];
+    if (String(topic.id) === String(topicId)) return nextPath;
+    const childPath = findTopicPath(topic.children || [], topicId, nextPath);
+    if (childPath.length) return childPath;
+  }
+  return [];
+};
+
+const collectTopicMap = (rootTopics, activeTopicId) => {
+  const activePath = findTopicPath(rootTopics, activeTopicId);
+  const activeRoot = activePath[0] || null;
+  const selectedTopic = activePath[activePath.length - 1] || null;
+
+  const rootNodes = rootTopics.map((rootTopic, index) => {
+    const base = rootTopics.length === 1 ? { x: 0, y: 0 } : rootScatterPositions[index % rootScatterPositions.length];
+    const ring = Math.floor(index / rootScatterPositions.length);
+    return {
+      topic: rootTopic,
+      x: base.x + (ring * 180),
+      y: base.y + (ring * 130),
+      isActive: activeRoot && String(activeRoot.id) === String(rootTopic.id)
+    };
+  });
+
+  const descendantNodes = [];
+  const links = [];
+
+  const layoutChildren = (parentTopic, parentNode, depth = 1, branchSide = null) => {
+    const children = parentTopic.children || [];
+
+    children.forEach((child, index) => {
+      const side = branchSide || (index % 2 === 0 ? 1 : -1);
+      const sameSideIndex = children.slice(0, index).filter((_, childIndex) => (branchSide || (childIndex % 2 === 0 ? 1 : -1)) === side).length;
+      const sameSideTotal = children.filter((_, childIndex) => (branchSide || (childIndex % 2 === 0 ? 1 : -1)) === side).length;
+      const yOffset = (sameSideIndex - ((sameSideTotal - 1) / 2)) * (depth === 1 ? 170 : 130);
+      const node = {
+        topic: child,
+        x: parentNode.x + (side * (depth === 1 ? 300 : 220)),
+        y: parentNode.y + yOffset,
+        depth,
+        side,
+        isSelected: selectedTopic && String(child.id) === String(selectedTopic.id),
+        isPath: activePath.some((pathTopic) => String(pathTopic.id) === String(child.id))
+      };
+
+      descendantNodes.push(node);
+      links.push({ from: parentNode, to: node });
+      layoutChildren(child, node, depth + 1, side);
+    });
+  };
+
+  rootNodes.forEach((rootNode) => {
+    layoutChildren(rootNode.topic, rootNode);
+  });
+
+  return { rootNodes, descendantNodes, links, selectedTopic };
+};
+
+const TopicTreeGraph = ({ rootTopics, activeTopic, onMoveToTopic }) => {
+  const { rootNodes, descendantNodes, links, selectedTopic } = collectTopicMap(rootTopics, activeTopic?.id);
+
+  if (!rootTopics.length) return null;
+
+  return (
+    <div className="topic-map" aria-label="Topic synapse map">
+      {links.map((link) => (
+        <span className="topic-map-link" key={`${link.from.topic.id}-${link.to.topic.id}`} style={lineStyle(link.from.x, link.from.y, link.to.x, link.to.y)} aria-hidden="true" />
+      ))}
+
+      {rootNodes.map((node) => (
+        <button className={`topic-map-node is-root ${node.isActive ? "is-active" : ""}`} key={node.topic.id} type="button" style={{ "--node-x": `${node.x}px`, "--node-y": `${node.y}px` }} onClick={(event) => onMoveToTopic(event, node.topic.id, { updateRoute: false })}>
+          <span>{node.topic.name}</span>
+        </button>
+      ))}
+
+      {descendantNodes.map((node) => (
+        <button className={`topic-map-node ${node.depth > 1 ? "is-small" : ""} ${node.isPath ? "is-path" : ""} ${node.isSelected ? "is-selected" : ""}`} key={node.topic.id} type="button" style={{ "--node-x": `${node.x}px`, "--node-y": `${node.y}px` }} onClick={(event) => onMoveToTopic(event, node.topic.id, { updateRoute: false })}>
+          <span>{node.topic.name}</span>
+        </button>
+      ))}
+
+      {selectedTopic && !descendantNodes.length && (
+        <div className="topic-map-hint">하위 토픽이 없습니다</div>
+      )}
+    </div>
+  );
+};
 
 // 중앙 작업 영역: 상단 경로/보기 전환과 Synapse 그래프 또는 Post List를 렌더링합니다.
 export default function Workspace({
@@ -33,12 +144,13 @@ export default function Workspace({
   onSetView,
   onZoom,
   onOpenModal,
-  onRequestTopicCreate,
+  onOpenTopicPanel,
   isRightPanelOpen,
   onToggleManageMode,
   onToggleRight
 }) {
   const hasActiveTopic = Boolean(activeTopic);
+  const visibleRootTopics = pageData.topics || [];
 
   const submitBrainSearch = (event) => {
     event.preventDefault();
@@ -145,38 +257,7 @@ export default function Workspace({
           <>
             {/* CSS 변수로 pan/zoom/tilt 값을 내려서 Prezi식 이동을 표현합니다. */}
             <div className="graph-viewport" style={{ "--pan-x": `${graph.x}px`, "--pan-y": `${graph.y}px`, "--zoom": graph.scale, "--tilt": `${graph.tilt || 0}deg` }}>
-              {/* 현재 Topic 주변에 배치되는 다른 Topic 클러스터들입니다. */}
-              {topicClusters.map((topic) => (
-                <button key={topic.id} className="graph-node topic-hub" type="button" data-endpoint={endpoints.topics.detail(topic.id)} style={{ "--cluster-x": `${topic.x}px`, "--cluster-y": `${topic.y}px` }} onClick={(event) => onMoveToTopic(event, topic.id, { updateRoute: false })} aria-label={`${topic.name} 토픽으로 이동`}>
-                  <span className="topic-orbit" aria-hidden="true">
-                    {Array.from({ length: topic.count }).map((_, index) => {
-                      const angle = (360 / topic.count) * index;
-                      return <i key={angle} style={{ "--dot-angle": `${angle}deg`, "--dot-back": `${-angle}deg` }} />;
-                    })}
-                  </span>
-                  <strong>{topic.name}</strong>
-                </button>
-              ))}
-              {/* 중앙 허브는 현재 보고 있는 Topic을 나타냅니다. */}
-              <button className="graph-node hub" type="button" data-endpoint={endpoints.topics.detail(activeTopic.id)} onClick={(event) => onMoveToTopic(event, activeTopic.id, { updateRoute: false })}>
-                <span dangerouslySetInnerHTML={{ __html: activeTopic.name.replace(" ", "<br>") }} />
-              </button>
-              {/* 문서 노드와 중앙 허브를 잇는 선을 좌표 기반으로 그립니다. */}
-              {graphNodes.map(([x, y], index) => {
-                const node = pageData.nodes[index % pageData.nodes.length];
-                if (!node) return null;
-                const angle = Math.atan2(y, x) * (180 / Math.PI);
-                const length = Math.sqrt((x * x) + (y * y));
-                return (
-                  <span key={`${node.id}-${index}`}>
-                    <span className="node-link" style={{ "--angle": `${angle}deg`, "--link-length": `${length}px` }} aria-hidden="true" />
-                    <button className="graph-node doc-node" type="button" data-endpoint={endpoints.nodes.detail(node.id)} style={{ "--node-x": `${x}px`, "--node-y": `${y}px` }} onClick={() => onFocusPoint(x, y, 1.65)} aria-label={`${node.title} 노드로 이동`} title={node.title}>
-                      <Icon name="file" />
-                      <span className="node-caption"><strong>{node.title}</strong><small>댓글 {node.comments}개</small></span>
-                    </button>
-                  </span>
-                );
-              })}
+              <TopicTreeGraph rootTopics={visibleRootTopics} activeTopic={activeTopic} onMoveToTopic={onMoveToTopic} />
             </div>
             {/* 그래프 확대/축소와 위치 초기화 컨트롤입니다. */}
             <div className="zoom-controls" aria-label="그래프 확대 축소">
@@ -197,10 +278,14 @@ export default function Workspace({
           </div>
           ) : null}
           {manageMode && canManageWorkspace && (
-            <button className="topic-add-floating" type="button" onClick={onRequestTopicCreate}>
-              <Icon name="plus" />
-              <span>토픽 추가</span>
-            </button>
+            <div className="manage-action-dock" aria-label="Topic management actions">
+              <button className="manage-action-button" type="button" onClick={() => onOpenTopicPanel("manage")}>
+                <span>토픽 관리</span>
+              </button>
+              <button className="manage-action-button danger" type="button" onClick={() => onOpenTopicPanel("delete")}>
+                <span>토픽 삭제</span>
+              </button>
+            </div>
           )}
         </div>
       )}
