@@ -222,6 +222,7 @@ export default function MainPage() {
   const flightTimer = useRef(null);
   const topicCatalogByBrain = useRef({});
   const commonTopicCatalog = useRef([]);
+  const brainTabState = useRef({});
 
   // 트리 구조의 토픽을 펼쳐서 현재 선택된 Brain/Topic을 계산합니다.
   const topicsFlat = useMemo(() => flattenTopics(pageData.topics), [pageData.topics]);
@@ -266,6 +267,41 @@ export default function MainPage() {
       if (current.some((item) => String(item.id) === String(brain.id))) return current;
       return [...current, brain];
     });
+  };
+
+  const buildBrainStateRoute = (brainId, cachedState = null) => {
+    const cachedTopicId = cachedState?.activeTopicId;
+    const cachedView = cachedState?.view || "synapse";
+    if (!cachedTopicId) return `/brains/${brainId}`;
+    return `/topics/${cachedTopicId}${cachedView === "posts" ? "/posts" : "/synapse"}`;
+  };
+
+  const rememberActiveBrainState = () => {
+    if (!pageData.activeBrainId || authStatus !== "authenticated") return;
+    brainTabState.current[String(pageData.activeBrainId)] = {
+      activeTopicId: pageData.activeTopicId,
+      view,
+      graph,
+      topics: clone(pageData.topics),
+      nodes: clone(pageData.nodes),
+      topicCatalog: clone(topicCatalog)
+    };
+  };
+
+  const applyCachedBrainState = (brainId, cachedState) => {
+    if (!cachedState) return false;
+
+    setPageData((current) => ({
+      ...current,
+      activeBrainId: String(brainId),
+      activeTopicId: cachedState.activeTopicId || null,
+      topics: clone(cachedState.topics || []),
+      nodes: clone(cachedState.nodes || [])
+    }));
+    setTopicCatalog(clone(cachedState.topicCatalog || []));
+    setGraph(clampGraph(cachedState.graph || { x: 0, y: 0, scale: 1, tilt: 0 }));
+    setView(cachedState.view || "synapse");
+    return true;
   };
 
   const syncVisibleTopics = (catalog, preferredTopicId = null) => {
@@ -317,7 +353,7 @@ export default function MainPage() {
   };
 
   // 특정 Brain의 Topic 트리와 선택 Topic의 Node를 WAS에서 다시 불러옵니다.
-  const loadBrainWorkspace = async (brainId, requestedTopicId = null) => {
+  const loadBrainWorkspace = async (brainId, requestedTopicId = null, options = {}) => {
     if (!brainId) return;
 
     try {
@@ -325,9 +361,12 @@ export default function MainPage() {
       const topics = restoreBrainTopicCatalog(brainId, buildTopicTree(detail?.topics || []));
       const visibleTopics = visibleTopicTree(topics);
       const flatTopics = flattenTopics(visibleTopics);
-      const selectedTopic = flatTopics.find((topic) => String(topic.id) === String(requestedTopicId)) || flatTopics[0] || null;
+      const cachedState = brainTabState.current[String(brainId)];
+      const preferredTopicId = requestedTopicId || cachedState?.activeTopicId || null;
+      const selectedTopic = flatTopics.find((topic) => String(topic.id) === String(preferredTopicId)) || flatTopics[0] || null;
       const nodes = selectedTopic ? await fetchTopicNodes(brainId, selectedTopic) : [];
       const normalizedBrain = normalizeBrain({ ...detail, topics: detail?.topics || [] });
+      const nextView = options.view || cachedState?.view || view;
 
       setPageData((current) => ({
         ...current,
@@ -337,6 +376,7 @@ export default function MainPage() {
         topics: visibleTopics,
         nodes
       }));
+      setView(nextView);
       setApiStatus("was");
       setTopicCatalog(topics);
       rememberTopicCatalog(brainId, topics);
@@ -490,6 +530,10 @@ export default function MainPage() {
       window.removeEventListener(ROUTE_EVENTS.changed, onRouteChange);
     };
   }, []);
+
+  useEffect(() => {
+    rememberActiveBrainState();
+  }, [authStatus, pageData.activeBrainId, pageData.activeTopicId, pageData.topics, pageData.nodes, view, graph, topicCatalog]);
 
   // 관리자/반장 권한이 아니거나 Brain을 벗어나면 관리모드는 자동으로 해제합니다.
   useEffect(() => {
@@ -657,23 +701,41 @@ export default function MainPage() {
   // 버튼 클릭으로 route를 이동합니다. 드래그 직후 발생한 클릭은 무시합니다.
   const handleRouteClick = (event, path) => {
     if (suppressNextClick.current) {
-      event.preventDefault();
+      event?.preventDefault?.();
       suppressNextClick.current = false;
       return;
     }
 
+    event?.preventDefault?.();
     setRoute(path);
     routeTo(path);
   };
 
   // Brain 클릭 시 왼쪽 목록의 activeBrainId를 바꾸고 route를 이동합니다.
   const selectBrain = (event, brainId, options = {}) => {
+    rememberActiveBrainState();
     if (options.openTab !== false) {
       addBrainTab(brainId);
     }
-    setPageData((current) => ({ ...current, activeBrainId: brainId }));
-    handleRouteClick(event, `/brains/${brainId}`);
-    loadBrainWorkspace(brainId);
+
+    const cachedState = brainTabState.current[String(brainId)];
+    const nextRoute = buildBrainStateRoute(brainId, cachedState);
+    const hasCachedState = applyCachedBrainState(brainId, cachedState);
+
+    if (!hasCachedState) {
+      setPageData((current) => ({
+        ...current,
+        activeBrainId: String(brainId),
+        activeTopicId: null,
+        topics: [],
+        nodes: []
+      }));
+      setView("synapse");
+      setGraph(clampGraph({ x: 0, y: 0, scale: 1, tilt: 0 }));
+    }
+
+    handleRouteClick(event, nextRoute);
+    loadBrainWorkspace(brainId, cachedState?.activeTopicId || null, { view: cachedState?.view || "synapse" });
   };
 
   // Chrome 탭처럼 열린 Brain 탭을 닫습니다. 현재 탭을 닫으면 옆 탭으로 이동하고, 없으면 빈 메인으로 돌아갑니다.
@@ -688,9 +750,12 @@ export default function MainPage() {
         const nextBrain = nextTabs[index] || nextTabs[index - 1] || null;
 
         if (nextBrain) {
-          setPageData((currentPageData) => ({ ...currentPageData, activeBrainId: nextBrain.id }));
-          routeTo(`/brains/${nextBrain.id}`);
-          loadBrainWorkspace(nextBrain.id);
+          const cachedState = brainTabState.current[String(nextBrain.id)];
+          applyCachedBrainState(nextBrain.id, cachedState);
+          const nextRoute = buildBrainStateRoute(nextBrain.id, cachedState);
+          setRoute(nextRoute);
+          routeTo(nextRoute);
+          loadBrainWorkspace(nextBrain.id, cachedState?.activeTopicId || null, { view: cachedState?.view || "synapse" });
         } else {
           setPageData((currentPageData) => ({
             ...currentPageData,
@@ -699,6 +764,7 @@ export default function MainPage() {
             topics: [],
             nodes: []
           }));
+          setView("synapse");
           routeTo("/main");
         }
       }
@@ -717,11 +783,23 @@ export default function MainPage() {
       return;
     }
 
+    const selectedTopic = topicsFlat.find((topic) => String(topic.id) === String(topicId)) || null;
+
+    if (shouldOpenPosts) {
+      setView("posts");
+      setPageData((current) => ({ ...current, activeTopicId: String(topicId), nodes: [] }));
+      if (shouldUpdateRoute) handleRouteClick(event, `/topics/${topicId}/posts`);
+      if (activeBrain) {
+        fetchTopicNodes(activeBrain.id, selectedTopic).then((nodes) => {
+          setPageData((current) => String(current.activeTopicId) === String(topicId) ? { ...current, nodes } : current);
+        });
+      }
+      return;
+    }
+
     const targetPoint = topicLayoutPoints.find((point) => String(point.topic.id) === String(topicId));
     if (targetPoint) focusGraphPoint(targetPoint.x, targetPoint.y, 1.35);
 
-    const selectedTopic = topicsFlat.find((topic) => String(topic.id) === String(topicId)) || null;
-    if (shouldOpenPosts) setView("posts");
     setPageData((current) => ({ ...current, activeTopicId: topicId }));
     if (activeBrain) {
       fetchTopicNodes(activeBrain.id, selectedTopic).then((nodes) => {
