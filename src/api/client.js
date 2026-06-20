@@ -61,3 +61,8 @@ export const apiPatch = (path, body) => apiRequest(path, {
   method: "PATCH",
   body: JSON.stringify(body)
 });
+
+// DELETE 요청 헬퍼입니다. 댓글/뉴런 삭제처럼 body 없이 삭제할 때 사용합니다.
+export const apiDelete = (path) => apiRequest(path, {
+  method: "DELETE"
+});

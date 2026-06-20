@@ -28,8 +28,26 @@ export const normalizeNodes = (nodes = []) => nodes.map((node) => ({
   content: node.content,
   writer: node.writer || "",
   createdAt: node.createdAt || "",
-  comments: 0
+  comments: node.commentCount ?? node.commentsCount ?? node.comments?.length ?? node.comments ?? 0
 }));
+
+export const normalizeComments = (comments = []) => comments.filter(Boolean).map((comment) => ({
+  id: String(comment.cid),
+  parentId: comment.pid == null ? null : String(comment.pid),
+  writer: comment.writer || "작성자",
+  content: comment.content || "",
+  createdAt: comment.createdAt || ""
+}));
+
+export const normalizeNodeDetail = (node = {}) => ({
+  id: String(node.nid),
+  title: node.title || "",
+  content: node.content || "",
+  writer: node.writer || "작성자",
+  createdAt: node.createdAt || "",
+  comments: normalizeComments(node.comments || []),
+  recommends: node.recommends || node.likeCount || 0
+});
 
 // WAS U01 응답은 { user: { email, name, role }, summary } 구조이고,
 // 로그인 응답은 { email, name } 구조라서 화면에서 쓰는 형태로 맞춥니다.

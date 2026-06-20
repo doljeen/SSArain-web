@@ -114,6 +114,38 @@ const TopicTreeGraph = ({ rootTopics, activeTopic, onMoveToTopic }) => {
   );
 };
 
+const formatDate = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).replace("T", " ").slice(0, 16);
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+};
+
+const buildCommentTree = (comments = []) => {
+  const commentMap = new Map();
+  const roots = [];
+
+  comments.forEach((comment) => {
+    commentMap.set(String(comment.id), { ...comment, children: [] });
+  });
+
+  commentMap.forEach((comment) => {
+    if (comment.parentId && commentMap.has(String(comment.parentId))) {
+      commentMap.get(String(comment.parentId)).children.push(comment);
+      return;
+    }
+    roots.push(comment);
+  });
+
+  return roots;
+};
+
 // 중앙 작업 영역: 상단 경로/보기 전환과 Synapse 그래프 또는 Post List를 렌더링합니다.
 export default function Workspace({
   activeBrain,
@@ -135,6 +167,7 @@ export default function Workspace({
   onSelectBrain,
   onCloseBrainTab,
   onMoveToTopic,
+  onOpenNodeDetail,
   onPointerDown,
   onPointerMove,
   onPointerUp,
@@ -146,6 +179,16 @@ export default function Workspace({
   onOpenModal,
   onOpenNodeModal,
   onOpenTopicPanel,
+  nodeDetail,
+  commentDraft,
+  onCloseNodeDetail,
+  onToggleNodeRecommend,
+  onUpdateCommentDraft,
+  onSubmitComment,
+  onStartCommentReply,
+  onStartCommentEdit,
+  onCancelCommentDraft,
+  onDeleteComment,
   isRightPanelOpen,
   onToggleManageMode,
   onToggleRight
@@ -162,6 +205,48 @@ export default function Workspace({
       || node.writer?.toLowerCase().includes(keyword)
     ));
   }, [pageData.nodes, postQuery]);
+  const commentTree = useMemo(() => buildCommentTree(nodeDetail?.data?.comments || []), [nodeDetail?.data?.comments]);
+  const activeCommentTarget = useMemo(() => {
+    if (!nodeDetail?.data || (!commentDraft.parentId && !commentDraft.editingId)) return null;
+    const targetId = commentDraft.editingId || commentDraft.parentId;
+    return nodeDetail.data.comments.find((comment) => String(comment.id) === String(targetId)) || null;
+  }, [commentDraft.editingId, commentDraft.parentId, nodeDetail?.data]);
+  const currentUserName = pageData.user?.name || "";
+  const currentRole = String(pageData.user?.role || "").toUpperCase();
+  const canModerateComments = ["ADMIN", "MANAGER", "LEADER"].includes(currentRole);
+
+  const renderComment = (comment, depth = 0) => {
+    const canEditComment = canModerateComments || (currentUserName && comment.writer === currentUserName);
+
+    return (
+      <div className="comment-thread" key={comment.id} style={{ "--comment-depth": depth }}>
+        <article className={`comment-card ${depth ? "is-reply" : ""}`}>
+          <div className="comment-avatar"><Icon name="user" /></div>
+          <div className="comment-content">
+            <div className="comment-meta">
+              <strong>{comment.writer}</strong>
+              {comment.createdAt && <span>{formatDate(comment.createdAt)}</span>}
+            </div>
+            <p>{comment.content}</p>
+            <div className="comment-actions" aria-label={`${comment.writer} 댓글 작업`}>
+              <button type="button" onClick={() => onStartCommentReply(comment)}>답글</button>
+              {canEditComment && (
+                <>
+                  <button type="button" onClick={() => onStartCommentEdit(comment)}>수정</button>
+                  <button className="is-danger" type="button" onClick={() => onDeleteComment(comment)}>삭제</button>
+                </>
+              )}
+            </div>
+          </div>
+        </article>
+        {comment.children.length > 0 && (
+          <div className="comment-replies">
+            {comment.children.map((child) => renderComment(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const submitBrainSearch = (event) => {
     event.preventDefault();
@@ -277,6 +362,78 @@ export default function Workspace({
               <button type="button" onClick={() => onZoom(graph.scale * 1.15, window.innerWidth / 2, window.innerHeight / 2)} aria-label="확대">+</button>
             </div>
           </>
+          ) : view === "posts" && hasActiveTopic && nodeDetail?.isOpen ? (
+          <article className="neuron-detail" aria-label="Neuron 상세">
+            <button className="neuron-back-button" type="button" onClick={onCloseNodeDetail}>
+              ← {activeTopic.name} 목록으로
+            </button>
+
+            {nodeDetail.isLoading ? (
+              <div className="post-empty-state">
+                <Icon name="file" />
+                <strong>Neuron을 불러오는 중입니다.</strong>
+              </div>
+            ) : nodeDetail.status ? (
+              <div className="post-empty-state">
+                <Icon name="file" />
+                <strong>{nodeDetail.status}</strong>
+              </div>
+            ) : nodeDetail.data ? (
+              <>
+                <header className="neuron-detail-header">
+                  <div>
+                    <p className="panel-kicker">NEURON</p>
+                    <h1>{nodeDetail.data.title}</h1>
+                    <div className="neuron-author-line">
+                      <span className="neuron-avatar"><Icon name="user" /></span>
+                      <span>{nodeDetail.data.writer}</span>
+                      {nodeDetail.data.createdAt && <span><Icon name="clock" />{formatDate(nodeDetail.data.createdAt)}</span>}
+                    </div>
+                  </div>
+                  <button className={`recommend-button ${nodeDetail.liked ? "is-active" : ""}`} type="button" onClick={onToggleNodeRecommend}>
+                    <Icon name="plus" />
+                    <span>추천 {nodeDetail.data.recommends || 0}</span>
+                  </button>
+                </header>
+
+                <section className="neuron-body">
+                  {nodeDetail.data.content.split("\n").map((line, index) => (
+                    <p key={`${nodeDetail.data.id}-${index}`}>{line || "\u00a0"}</p>
+                  ))}
+                </section>
+
+                <section className="neuron-comments" aria-labelledby="neuron-comments-heading">
+                  <div className="neuron-comments-head">
+                    <h2 id="neuron-comments-heading"><Icon name="bell" />댓글 {nodeDetail.data.comments.length}</h2>
+                  </div>
+
+                  <form className="comment-form" onSubmit={onSubmitComment}>
+                    {(commentDraft.parentId || commentDraft.editingId) && (
+                      <div className="comment-form-context">
+                        <strong>{commentDraft.editingId ? "댓글 수정 중" : "답글 작성 중"}</strong>
+                        {activeCommentTarget && <span>{activeCommentTarget.writer} · {activeCommentTarget.content}</span>}
+                        <button type="button" onClick={onCancelCommentDraft}>취소</button>
+                      </div>
+                    )}
+                    <textarea value={commentDraft.content} onChange={onUpdateCommentDraft} placeholder={commentDraft.parentId ? "답글을 입력해주세요." : "댓글을 입력해주세요."} maxLength={255} rows={4} />
+                    <div className="comment-form-actions">
+                      {commentDraft.status && <span role="status">{commentDraft.status}</span>}
+                      <button type="submit" disabled={commentDraft.isSubmitting}>
+                        {commentDraft.isSubmitting ? "저장 중" : (commentDraft.editingId ? "댓글 수정" : (commentDraft.parentId ? "답글 작성" : "댓글 작성"))}
+                      </button>
+                    </div>
+                  </form>
+
+                  <div className="comment-list">
+                    {commentTree.map((comment) => renderComment(comment))}
+                    {!nodeDetail.data.comments.length && (
+                      <p className="comment-empty">아직 댓글이 없습니다. 첫 의견을 남겨보세요.</p>
+                    )}
+                  </div>
+                </section>
+              </>
+            ) : null}
+          </article>
           ) : view === "posts" && hasActiveTopic ? (
           // Post List 보기에서는 현재 Topic의 문서 목록 형태로 노드를 보여줍니다.
           <div className="post-list">
@@ -299,25 +456,27 @@ export default function Workspace({
 
             <div className="post-card-list">
               {filteredNodes.map((node) => (
-                <button className="post-card" type="button" key={node.id} onClick={(event) => onRoute(event, `/nodes/${node.id}`)}>
+                <button className="post-card" type="button" key={node.id} onClick={(event) => onOpenNodeDetail(event, node.id)}>
                   <span className="post-topic"><Icon name="folder" />{activeTopic.name}</span>
-                  <strong>{node.title}</strong>
-                  <p>{node.content || "내용이 없습니다."}</p>
+                  <span className="post-card-body">
+                    <strong>{node.title}</strong>
+                    <small>{node.content || "내용이 없습니다."}</small>
+                  </span>
                   <span className="post-card-meta">
-                    <span><Icon name="user" />{node.writer || pageData.user.name || "작성자"}</span>
-                    <span><Icon name="bell" />댓글 {node.comments || 0}개</span>
+                    <span className="post-author"><Icon name="user" />{node.writer || pageData.user.name || "작성자"}</span>
+                    {node.createdAt && <span><Icon name="clock" />{formatDate(node.createdAt)}</span>}
+                    <span><Icon name="bell" />댓글 {node.comments || 0}</span>
                   </span>
                 </button>
               ))}
+              {!filteredNodes.length && (
+                <div className="post-empty-state">
+                  <Icon name="file" />
+                  <strong>{postQuery ? "검색 결과가 없습니다." : "아직 작성된 Neuron이 없습니다."}</strong>
+                  <span>{postQuery ? "다른 검색어로 다시 찾아보세요." : "뉴런 추가 버튼으로 첫 글을 작성해보세요."}</span>
+                </div>
+              )}
             </div>
-
-            {!filteredNodes.length && (
-              <div className="post-empty-state">
-                <Icon name="file" />
-                <strong>{postQuery ? "검색 결과가 없습니다." : "아직 작성된 Neuron이 없습니다."}</strong>
-                <span>{postQuery ? "다른 검색어로 다시 찾아보세요." : "뉴런 추가 버튼으로 첫 글을 작성해보세요."}</span>
-              </div>
-            )}
           </div>
           ) : null}
           {manageMode && canManageWorkspace && (

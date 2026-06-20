@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { apiGet, apiPost } from "../../api/client.js";
+import { apiDelete, apiGet, apiPatch, apiPost } from "../../api/client.js";
 import { endpoints } from "../../api/endpoints.js";
 import { guestPreview } from "../../data/guestPreview.js";
 import { mainMock } from "../../data/mainMock.js";
@@ -10,7 +10,7 @@ import Sidebar from "./components/Sidebar.jsx";
 import TopicManagerPanel from "./components/TopicManagerPanel.jsx";
 import Workspace from "./components/Workspace.jsx";
 import { createModalCopy } from "./config/modalConfig.js";
-import { buildTopicTree, clone, flattenTopics, normalizeBrain, normalizeNodes, normalizeUserInfo } from "./config/mainUtils.js";
+import { buildTopicTree, clone, flattenTopics, normalizeBrain, normalizeComments, normalizeNodeDetail, normalizeNodes, normalizeUserInfo } from "./config/mainUtils.js";
 
 const CREATED_WORKSPACE_KEY = "ssarain-created-workspace";
 const AUTH_STATE_KEY = "ssarain-authenticated";
@@ -41,13 +41,18 @@ const getTopicIdFromRoute = (path) => {
   return match ? decodeURIComponent(match[1]) : null;
 };
 
+const getNodeIdFromRoute = (path) => {
+  const match = path.match(/^\/nodes\/([^/]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+};
+
 const getBrainIdFromRoute = (path) => {
   const match = path.match(/^\/brains\/([^/]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 };
 
 const isBrainSearchRoute = (path) => path === "/brains/search";
-const getViewFromRoute = (path) => path.includes("/posts") ? "posts" : "synapse";
+const getViewFromRoute = (path) => path.includes("/posts") || path.startsWith("/nodes/") ? "posts" : "synapse";
 const canUseManageMode = (role) => ["ADMIN", "MANAGER", "LEADER"].includes(String(role || "").toUpperCase());
 const isTopicUsing = (value) => value === true || value === "true" || value === 1 || value === "1";
 const rootScatterPositions = [
@@ -182,6 +187,33 @@ const visibleTopicTree = (topics) => topics.reduce((visible, topic) => {
   return visible;
 }, []);
 
+const topicMetaMap = (topics, map = new Map()) => {
+  topics.forEach((topic) => {
+    map.set(String(topic.id), {
+      btid: topic.btid == null ? null : String(topic.btid),
+      isUsing: isTopicUsing(topic.isUsing)
+    });
+    topicMetaMap(topic.children || [], map);
+  });
+  return map;
+};
+
+const applyBrainTopicMeta = (topics, metaMap) => topics.map((topic) => {
+  const meta = metaMap.get(String(topic.id));
+  return {
+    ...topic,
+    btid: meta?.btid ?? topic.btid ?? null,
+    isUsing: meta ? meta.isUsing : false,
+    children: applyBrainTopicMeta(topic.children || [], metaMap)
+  };
+});
+
+const updateTopicBtid = (topics, topicId, btid) => topics.map((topic) => (
+  String(topic.id) === String(topicId)
+    ? { ...topic, btid: btid == null ? null : String(btid) }
+    : { ...topic, children: updateTopicBtid(topic.children || [], topicId, btid) }
+));
+
 export default function MainPage() {
   // 화면 전체에서 쓰는 데이터입니다. WAS 호출 실패 시 mainMock을 그대로 사용합니다.
   const [pageData, setPageData] = useState(() => clone(mainMock));
@@ -196,6 +228,8 @@ export default function MainPage() {
   // 모달, 토스트, API 연결 상태, 그래프 이동 애니메이션 상태입니다.
   const [modal, setModal] = useState(null);
   const [nodeDraft, setNodeDraft] = useState({ isOpen: false, title: "", content: "", status: "", isSubmitting: false });
+  const [nodeDetail, setNodeDetail] = useState({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
+  const [commentDraft, setCommentDraft] = useState({ content: "", status: "", isSubmitting: false, parentId: null, editingId: null });
   const [toast, setToast] = useState("");
   const [apiStatus, setApiStatus] = useState("mock");
   const [flying, setFlying] = useState(false);
@@ -239,8 +273,7 @@ export default function MainPage() {
   };
 
   const mergeCommonTopicsWithBrainUse = (commonTopics, brainTopics) => {
-    const visibleIds = collectTopicIds(visibleTopicTree(brainTopics));
-    return markAncestorUsing(applyVisibleTopicIds(commonTopics, visibleIds));
+    return markAncestorUsing(applyBrainTopicMeta(commonTopics, topicMetaMap(visibleTopicTree(brainTopics))));
   };
 
   const loadCommonTopicCatalog = async () => {
@@ -254,7 +287,7 @@ export default function MainPage() {
 
   const restoreBrainTopicCatalog = (brainId, topics, options = {}) => {
     const cachedCatalog = topicCatalogByBrain.current[String(brainId)];
-    if (cachedCatalog && options.preferCached !== false) return markAncestorUsing(clone(cachedCatalog));
+    if (cachedCatalog && options.preferCached !== false) return markAncestorUsing(applyTopicUseMap(topics, topicUseMap(cachedCatalog)));
     if (!cachedCatalog) return markAncestorUsing(topics);
     return markAncestorUsing(applyTopicUseMap(topics, topicUseMap(cachedCatalog)));
   };
@@ -346,9 +379,58 @@ export default function MainPage() {
 
     try {
       const result = await apiGet(endpoints.nodes.preview(topic.btid));
-      return normalizeNodes(result?.neuronPreviewList || []);
+      const previewNodes = normalizeNodes(result?.neuronPreviewList || []);
+      const detailedNodes = await Promise.all(previewNodes.map(async (node) => {
+        try {
+          const detail = normalizeNodeDetail(await apiGet(endpoints.nodes.detail(node.id)));
+          return {
+            ...node,
+            writer: detail.writer || node.writer,
+            createdAt: detail.createdAt || node.createdAt,
+            comments: detail.comments.length
+          };
+        } catch (error) {
+          return node;
+        }
+      }));
+      return detailedNodes;
     } catch (error) {
       return [];
+    }
+  };
+
+  const loadNodeDetail = async (nodeId) => {
+    if (!nodeId) return;
+
+    setNodeDetail((current) => ({
+      ...current,
+      isOpen: true,
+      isLoading: true,
+      status: "",
+      data: current.data?.id === String(nodeId) ? current.data : null
+    }));
+    setView("posts");
+
+    try {
+      const detail = await apiGet(endpoints.nodes.detail(nodeId));
+      const normalizedDetail = normalizeNodeDetail(detail);
+      setNodeDetail({ isOpen: true, isLoading: false, data: normalizedDetail, status: "", liked: false });
+      setPageData((current) => ({
+        ...current,
+        nodes: current.nodes.map((node) => (
+          String(node.id) === String(nodeId)
+            ? { ...node, comments: normalizedDetail.comments.length }
+            : node
+        ))
+      }));
+      setCommentDraft({ content: "", status: "", isSubmitting: false, parentId: null, editingId: null });
+    } catch (error) {
+      setNodeDetail((current) => ({
+        ...current,
+        isOpen: true,
+        isLoading: false,
+        status: `Neuron 상세 정보를 불러오지 못했습니다 · ${error.message}`
+      }));
     }
   };
 
@@ -418,11 +500,13 @@ export default function MainPage() {
         catalogTopics = restoreBrainTopicCatalog(selectedBrain.id, buildTopicTree(brainDetail?.topics || []));
         const visibleTopics = visibleTopicTree(catalogTopics);
         const flatTopics = flattenTopics(visibleTopics);
-        const routedTopicId = getTopicIdFromRoute(route);
-        const selectedTopic = flatTopics.find((topic) => String(topic.id) === String(routedTopicId)) || flatTopics[0] || null;
-        activeTopicId = selectedTopic ? String(selectedTopic.id) : null;
-        nodes = selectedTopic ? await fetchTopicNodes(selectedBrain.id, selectedTopic) : [];
-        topics = visibleTopics;
+      const routedTopicId = getTopicIdFromRoute(route);
+      const routedNodeId = getNodeIdFromRoute(route);
+      const selectedTopic = flatTopics.find((topic) => String(topic.id) === String(routedTopicId)) || flatTopics[0] || null;
+      activeTopicId = selectedTopic ? String(selectedTopic.id) : null;
+      nodes = selectedTopic ? await fetchTopicNodes(selectedBrain.id, selectedTopic) : [];
+      topics = visibleTopics;
+      if (routedNodeId) loadNodeDetail(routedNodeId);
 
         const detailBrain = normalizeBrain({ ...brainDetail, topics: brainDetail?.topics || [] });
         nextBrains = brains.map((brain) => String(brain.id) === String(detailBrain.id) ? detailBrain : brain);
@@ -515,6 +599,12 @@ export default function MainPage() {
       syncDocumentRoute(nextRoute);
       setView(getViewFromRoute(nextRoute));
       const routedTopicId = getTopicIdFromRoute(nextRoute);
+      const routedNodeId = getNodeIdFromRoute(nextRoute);
+      if (routedNodeId) {
+        loadNodeDetail(routedNodeId);
+      } else {
+        setNodeDetail((current) => current.isOpen ? { isOpen: false, isLoading: false, data: null, status: "", liked: false } : current);
+      }
       if (routedTopicId) {
         setPageData((current) => ({ ...current, activeTopicId: routedTopicId }));
       }
@@ -608,22 +698,50 @@ export default function MainPage() {
     window.setTimeout(() => setToast(""), 2600);
   };
 
-  const openNodeCreateModal = () => {
+  const resolveActiveTopicForNeuron = async () => {
     if (!activeTopic) {
       showToast("Topic을 먼저 선택해주세요.");
-      return;
+      return null;
     }
 
-    if (!activeTopic.btid) {
+    if (activeTopic.btid) return activeTopic;
+
+    if (!activeBrain) return activeTopic;
+
+    try {
+      const detail = await apiGet(endpoints.brains.topicDetail(activeBrain.id, activeTopic.id));
+      if (!detail?.btid) return activeTopic;
+
+      const nextBtid = String(detail.btid);
+      setPageData((current) => ({
+        ...current,
+        topics: updateTopicBtid(current.topics, activeTopic.id, nextBtid)
+      }));
+      setTopicCatalog((current) => {
+        const nextCatalog = updateTopicBtid(current, activeTopic.id, nextBtid);
+        rememberTopicCatalog(activeBrain.id, nextCatalog);
+        return nextCatalog;
+      });
+      return { ...activeTopic, btid: nextBtid };
+    } catch (error) {
+      return activeTopic;
+    }
+  };
+
+  const openNodeCreateModal = async () => {
+    const topicForNeuron = await resolveActiveTopicForNeuron();
+    if (!topicForNeuron) return;
+
+    if (!topicForNeuron.btid) {
       showToast("Brain에 표시된 Topic에서만 Neuron을 작성할 수 있습니다.");
       return;
     }
 
-    setNodeDraft({ isOpen: true, title: "", content: "", status: "", isSubmitting: false });
+    setNodeDraft({ isOpen: true, title: "", content: "", status: "", isSubmitting: false, btid: topicForNeuron.btid });
   };
 
   const closeNodeCreateModal = () => {
-    setNodeDraft({ isOpen: false, title: "", content: "", status: "", isSubmitting: false });
+    setNodeDraft({ isOpen: false, title: "", content: "", status: "", isSubmitting: false, btid: null });
   };
 
   const updateNodeDraft = (event) => {
@@ -634,7 +752,8 @@ export default function MainPage() {
   const submitNodeDraft = async (event) => {
     event.preventDefault();
 
-    if (!activeTopic?.btid) {
+    const targetBtid = activeTopic?.btid || nodeDraft.btid;
+    if (!targetBtid) {
       setNodeDraft((current) => ({ ...current, status: "Brain Topic 연결 정보가 없습니다." }));
       return;
     }
@@ -653,17 +772,18 @@ export default function MainPage() {
       const created = await apiPost(endpoints.nodes.create, {
         title,
         content,
-        btid: Number(activeTopic.btid)
+        btid: Number(targetBtid)
       });
       const nextNode = normalizeNodes([created])[0];
       setPageData((current) => ({
         ...current,
         nodes: [nextNode, ...current.nodes]
       }));
+      setNodeDetail({ isOpen: true, isLoading: false, data: normalizeNodeDetail(created), status: "", liked: false });
       closeNodeCreateModal();
       setView("posts");
-      routeTo(`/topics/${activeTopic.id}/posts`);
-      setRoute(`/topics/${activeTopic.id}/posts`);
+      routeTo(`/nodes/${created.nid || nextNode.id}`);
+      setRoute(`/nodes/${created.nid || nextNode.id}`);
       showToast(`${created.title || title} Neuron 작성 완료`);
     } catch (error) {
       setNodeDraft((current) => ({ ...current, isSubmitting: false, status: `Neuron 작성 실패 · ${error.message}` }));
@@ -779,13 +899,13 @@ export default function MainPage() {
     const shouldOpenPosts = options.openPosts === true;
 
     if (suppressNextClick.current) {
-      if (shouldUpdateRoute) handleRouteClick(event, shouldOpenPosts ? `/topics/${topicId}/posts` : `/topics/${topicId}`);
-      return;
+      suppressNextClick.current = false;
     }
 
     const selectedTopic = topicsFlat.find((topic) => String(topic.id) === String(topicId)) || null;
 
     if (shouldOpenPosts) {
+      setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
       setView("posts");
       setPageData((current) => ({ ...current, activeTopicId: String(topicId), nodes: [] }));
       if (shouldUpdateRoute) handleRouteClick(event, `/topics/${topicId}/posts`);
@@ -807,6 +927,157 @@ export default function MainPage() {
       });
     }
     if (shouldUpdateRoute) handleRouteClick(event, shouldOpenPosts ? `/topics/${topicId}/posts` : `/topics/${topicId}`);
+  };
+
+  const openNodeDetail = (event, nodeId) => {
+    handleRouteClick(event, `/nodes/${nodeId}`);
+    loadNodeDetail(nodeId);
+  };
+
+  const closeNodeDetail = (event) => {
+    const nextRoute = activeTopic ? `/topics/${activeTopic.id}/posts` : "/main/posts";
+    setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
+    setCommentDraft({ content: "", status: "", isSubmitting: false, parentId: null, editingId: null });
+    setView("posts");
+    handleRouteClick(event, nextRoute);
+  };
+
+  const toggleNodeRecommend = () => {
+    setNodeDetail((current) => {
+      if (!current.data) return current;
+      const liked = !current.liked;
+      return {
+        ...current,
+        liked,
+        data: {
+          ...current.data,
+          recommends: Math.max(0, (current.data.recommends || 0) + (liked ? 1 : -1))
+        }
+      };
+    });
+    showToast("추천 API가 준비되면 WAS에 저장되도록 연결할 예정입니다.");
+  };
+
+  const updateCommentDraft = (event) => {
+    setCommentDraft((current) => ({ ...current, content: event.target.value, status: "" }));
+  };
+
+  const resetCommentDraft = () => {
+    setCommentDraft({ content: "", status: "", isSubmitting: false, parentId: null, editingId: null });
+  };
+
+  const syncNodeCommentCount = (nodeId, count) => {
+    setPageData((current) => ({
+      ...current,
+      nodes: current.nodes.map((node) => (
+        String(node.id) === String(nodeId)
+          ? { ...node, comments: count }
+          : node
+      ))
+    }));
+  };
+
+  const removeCommentWithReplies = (comments, commentId) => {
+    const deletedIds = new Set([String(commentId)]);
+    let changed = true;
+
+    while (changed) {
+      changed = false;
+      comments.forEach((comment) => {
+        if (comment.parentId && deletedIds.has(String(comment.parentId)) && !deletedIds.has(String(comment.id))) {
+          deletedIds.add(String(comment.id));
+          changed = true;
+        }
+      });
+    }
+
+    return comments.filter((comment) => !deletedIds.has(String(comment.id)));
+  };
+
+  const submitComment = async (event) => {
+    event.preventDefault();
+    const content = commentDraft.content.trim();
+    const nodeId = nodeDetail.data?.id;
+
+    if (!nodeId) return;
+    if (!content) {
+      setCommentDraft((current) => ({ ...current, status: "댓글 내용을 입력해주세요." }));
+      return;
+    }
+
+    setCommentDraft((current) => ({ ...current, isSubmitting: true, status: "" }));
+
+    try {
+      if (commentDraft.editingId) {
+        const updatedComment = await apiPatch(endpoints.comments.update(commentDraft.editingId), { content });
+        const [nextComment] = normalizeComments([updatedComment]);
+        const nextComments = nodeDetail.data.comments.map((comment) => (
+          String(comment.id) === String(commentDraft.editingId)
+            ? { ...comment, ...nextComment, id: comment.id, parentId: comment.parentId, content: nextComment?.content || content }
+            : comment
+        ));
+
+        setNodeDetail((current) => ({
+          ...current,
+          data: current.data ? { ...current.data, comments: nextComments } : current.data
+        }));
+        resetCommentDraft();
+        showToast("댓글 수정 완료");
+        return;
+      }
+
+      const createdComment = await apiPost(endpoints.comments.create, {
+        nid: Number(nodeId),
+        pid: commentDraft.parentId ? Number(commentDraft.parentId) : null,
+        content
+      });
+      const [nextComment] = normalizeComments([createdComment]);
+      const nextComments = [...nodeDetail.data.comments, nextComment];
+
+      setNodeDetail((current) => ({
+        ...current,
+        data: current.data
+          ? { ...current.data, comments: nextComments }
+          : current.data
+      }));
+      syncNodeCommentCount(nodeId, nextComments.length);
+      resetCommentDraft();
+      showToast(commentDraft.parentId ? "답글 작성 완료" : "댓글 작성 완료");
+    } catch (error) {
+      setCommentDraft((current) => ({
+        ...current,
+        isSubmitting: false,
+        status: `${current.editingId ? "댓글 수정" : "댓글 작성"} 실패 · ${error.message}`
+      }));
+    }
+  };
+
+  const startCommentReply = (comment) => {
+    setCommentDraft({ content: "", status: "", isSubmitting: false, parentId: String(comment.id), editingId: null });
+  };
+
+  const startCommentEdit = (comment) => {
+    setCommentDraft({ content: comment.content || "", status: "", isSubmitting: false, parentId: null, editingId: String(comment.id) });
+  };
+
+  const deleteComment = async (comment) => {
+    if (!nodeDetail.data) return;
+
+    try {
+      await apiDelete(endpoints.comments.remove(comment.id));
+      const nextComments = removeCommentWithReplies(nodeDetail.data.comments, comment.id);
+      setNodeDetail((current) => ({
+        ...current,
+        data: current.data ? { ...current.data, comments: nextComments } : current.data
+      }));
+      syncNodeCommentCount(nodeDetail.data.id, nextComments.length);
+      if (String(commentDraft.editingId) === String(comment.id) || String(commentDraft.parentId) === String(comment.id)) {
+        resetCommentDraft();
+      }
+      showToast("댓글 삭제 완료");
+    } catch (error) {
+      setCommentDraft((current) => ({ ...current, status: `댓글 삭제 실패 · ${error.message}` }));
+    }
   };
 
   // 그래프 빈 영역을 누르면 pan 시작 정보를 저장합니다.
@@ -1014,6 +1285,7 @@ export default function MainPage() {
         onFocusPoint={focusGraphPoint}
         onJoinBrain={requestJoinBrain}
         onMoveToTopic={moveToTopic}
+        onOpenNodeDetail={openNodeDetail}
         onOpenNodeModal={openNodeCreateModal}
         onOpenModal={setModal}
         onOpenTopicPanel={openTopicPanel}
@@ -1029,6 +1301,16 @@ export default function MainPage() {
         onRoute={handleRouteClick}
         onSetGraph={setGraph}
         onSetView={setView}
+        nodeDetail={nodeDetail}
+        commentDraft={commentDraft}
+        onCloseNodeDetail={closeNodeDetail}
+        onToggleNodeRecommend={toggleNodeRecommend}
+        onUpdateCommentDraft={updateCommentDraft}
+        onSubmitComment={submitComment}
+        onStartCommentReply={startCommentReply}
+        onStartCommentEdit={startCommentEdit}
+        onCancelCommentDraft={resetCommentDraft}
+        onDeleteComment={deleteComment}
         onWheel={handleWheel}
         onZoom={zoomGraph}
       />
