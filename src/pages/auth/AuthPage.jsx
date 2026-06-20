@@ -210,8 +210,8 @@ export default function AuthPage({ mode }) {
           {/* 이메일은 로그인/회원가입 모두 사용하고, 회원가입에서는 인증번호 전송 버튼이 붙습니다. */}
           <div className={`auth-field-row ${isSignup ? "" : "is-single"}`}>
             <label>
-              <span>이메일</span>
-              <input name="email" type="email" placeholder="admin@ssarain.io" value={form.email} onChange={updateField} required />
+              <span>{isSignup ? "이메일" : "아이디 또는 이메일"}</span>
+              <input name="email" type={isSignup ? "email" : "text"} placeholder={isSignup ? "student@ssarain.io" : "이메일"} value={form.email} onChange={updateField} required />
             </label>
             {isSignup && <button className="auth-side-button" type="button" onClick={requestEmailCode} disabled={isSubmitting}>인증번호 전송</button>}
           </div>

@@ -9,7 +9,6 @@ import MainModal from "./components/MainModal.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import TopicManagerPanel from "./components/TopicManagerPanel.jsx";
 import Workspace from "./components/Workspace.jsx";
-import { clusterPositions } from "./config/graphConfig.js";
 import { createModalCopy } from "./config/modalConfig.js";
 import { buildTopicTree, clone, flattenTopics, normalizeBrain, normalizeNodes, normalizeUserInfo } from "./config/mainUtils.js";
 
@@ -50,6 +49,54 @@ const getBrainIdFromRoute = (path) => {
 const isBrainSearchRoute = (path) => path === "/brains/search";
 const canUseManageMode = (role) => ["ADMIN", "MANAGER", "LEADER"].includes(String(role || "").toUpperCase());
 const isTopicUsing = (value) => value === true || value === "true" || value === 1 || value === "1";
+const rootScatterPositions = [
+  { x: -620, y: -270 },
+  { x: 650, y: 260 },
+  { x: 0, y: 0 },
+  { x: -300, y: 390 },
+  { x: 410, y: -385 },
+  { x: -820, y: 150 },
+  { x: 850, y: -155 },
+  { x: -910, y: -420 },
+  { x: 930, y: 440 }
+];
+
+const collectTopicLayoutPoints = (rootTopics) => {
+  const points = [];
+  const rootNodes = rootTopics.map((rootTopic, index) => {
+    const base = rootTopics.length === 1 ? { x: 0, y: 0 } : rootScatterPositions[index % rootScatterPositions.length];
+    const ring = Math.floor(index / rootScatterPositions.length);
+    const node = {
+      topic: rootTopic,
+      x: base.x + (ring * 180),
+      y: base.y + (ring * 130)
+    };
+    points.push(node);
+    return node;
+  });
+
+  const layoutChildren = (parentTopic, parentNode, depth = 1, branchSide = null) => {
+    const children = parentTopic.children || [];
+
+    children.forEach((child, index) => {
+      const side = branchSide || (index % 2 === 0 ? 1 : -1);
+      const sameSideIndex = children.slice(0, index).filter((_, childIndex) => (branchSide || (childIndex % 2 === 0 ? 1 : -1)) === side).length;
+      const sameSideTotal = children.filter((_, childIndex) => (branchSide || (childIndex % 2 === 0 ? 1 : -1)) === side).length;
+      const yOffset = (sameSideIndex - ((sameSideTotal - 1) / 2)) * (depth === 1 ? 170 : 130);
+      const node = {
+        topic: child,
+        x: parentNode.x + (side * (depth === 1 ? 300 : 220)),
+        y: parentNode.y + yOffset
+      };
+
+      points.push(node);
+      layoutChildren(child, node, depth + 1, side);
+    });
+  };
+
+  rootNodes.forEach((rootNode) => layoutChildren(rootNode.topic, rootNode));
+  return points;
+};
 
 const mapTopicTree = (topics, mapper) => topics.map((topic) => {
   const nextTopic = mapper(topic);
@@ -447,18 +494,8 @@ export default function MainPage() {
     }
   }, [canManageWorkspace, manageMode]);
 
-  // 중앙 허브 주변에 보이는 다른 토픽 묶음의 좌표와 점 개수를 계산합니다.
-  const topicClusters = useMemo(() => {
-    return topicsFlat
-      .filter((topic) => topic.id !== activeTopic?.id)
-      .slice(0, clusterPositions.length)
-      .map((topic, index) => ({
-        ...topic,
-        x: clusterPositions[index][0],
-        y: clusterPositions[index][1],
-        count: Math.max(4, Math.min(8, (topic.children?.length || 0) + 4))
-      }));
-  }, [topicsFlat, activeTopic?.id]);
+  // 실제 Topic Tree 렌더링과 같은 좌표계를 사용해 클릭/사이드바 이동 위치를 계산합니다.
+  const topicLayoutPoints = useMemo(() => collectTopicLayoutPoints(pageData.topics), [pageData.topics]);
 
   // 현재 Topic/User 정보에 따라 모달 문구와 연결 엔드포인트를 생성합니다.
   const modalCopy = useMemo(() => createModalCopy({
@@ -604,7 +641,7 @@ export default function MainPage() {
     });
   };
 
-  // Topic 클릭 시 중앙 내용을 바꾸지 않고 그래프 카메라만 해당 토픽 방향으로 이동합니다.
+  // Topic 클릭 시 실제 화면에 그려진 Topic Tree 좌표로 그래프 카메라를 이동합니다.
   const moveToTopic = (event, topicId, options = {}) => {
     const shouldUpdateRoute = options.updateRoute !== false;
 
@@ -613,12 +650,8 @@ export default function MainPage() {
       return;
     }
 
-    if (topicId === activeTopic?.id) {
-      focusGraphPoint(0, 0, 1.35);
-    } else {
-      const targetCluster = topicClusters.find((topic) => topic.id === topicId);
-      if (targetCluster) focusGraphPoint(targetCluster.x, targetCluster.y, 1.35);
-    }
+    const targetPoint = topicLayoutPoints.find((point) => String(point.topic.id) === String(topicId));
+    if (targetPoint) focusGraphPoint(targetPoint.x, targetPoint.y, 1.35);
 
     setPageData((current) => ({ ...current, activeTopicId: topicId }));
     if (activeBrain) {
@@ -824,7 +857,6 @@ export default function MainPage() {
         graphClassName={graphClassName}
         graphFieldRef={graphFieldRef}
         pageData={pageData}
-        topicClusters={topicClusters}
         view={view}
         brainSearch={brainSearch}
         openBrainTabs={openBrainTabs}

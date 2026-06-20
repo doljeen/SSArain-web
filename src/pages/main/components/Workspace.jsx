@@ -123,7 +123,6 @@ export default function Workspace({
   pageData,
   brainSearch,
   openBrainTabs,
-  topicClusters,
   view,
   isAuthenticated,
   isBrainSearchView,

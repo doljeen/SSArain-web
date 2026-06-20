@@ -55,3 +55,9 @@ export const apiPost = (path, body) => apiRequest(path, {
   method: "POST",
   body: JSON.stringify(body)
 });
+
+// PATCH 요청 헬퍼입니다. 관리자 권한 변경처럼 일부 값만 수정할 때 사용합니다.
+export const apiPatch = (path, body) => apiRequest(path, {
+  method: "PATCH",
+  body: JSON.stringify(body)
+});

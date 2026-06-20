@@ -1,10 +1,17 @@
 import { useState } from "react";
-import { apiPost } from "../../api/client.js";
+import { apiGet, apiPost } from "../../api/client.js";
 import { endpoints } from "../../api/endpoints.js";
 import Icon from "../../shared/icons/Icon.jsx";
 import { routeTo } from "../../shared/router/routes.js";
 
 const STORAGE_KEY = "ssarain-created-workspace";
+
+const normalizeBrainUser = (user) => ({
+  // WAS의 BrainUserInfoDto는 UUID라는 대문자 JSON 키를 내려줍니다.
+  id: String(user?.UUID || user?.uuid || user?.uid || user?.id || ""),
+  name: user?.name || "",
+  email: user?.email || ""
+});
 
 export default function BrainCreatePage() {
   // BrainCreateDto와 화면 전용 초대 멤버 상태입니다.
@@ -29,7 +36,7 @@ export default function BrainCreatePage() {
     setForm((current) => ({ ...current, [name]: type === "checkbox" ? checked : value }));
   };
 
-  // 검색/초대 API가 추가되기 전까지 입력한 이름을 초대 예정 목록에 추가합니다.
+  // 입력한 이름/이메일을 생성 이후 Brain 초대 후보 검색 API에 사용할 목록으로 보관합니다.
   const addMember = () => {
     const keyword = form.memberKeyword.trim();
     if (!keyword) return;
@@ -39,6 +46,50 @@ export default function BrainCreatePage() {
 
   const removeMember = (member) => {
     setMembers((current) => current.filter((item) => item !== member));
+  };
+
+  const findInviteTarget = async (brainId, keyword) => {
+    // B12 API로 현재 Brain에 아직 소속되지 않은 사용자를 검색합니다.
+    const result = await apiGet(endpoints.brains.availableUsers(brainId, keyword, 0, 5));
+    const candidates = (result?.users || []).map(normalizeBrainUser).filter((user) => user.id);
+    return (
+      candidates.find((user) => user.email === keyword || user.name === keyword)
+      || candidates[0]
+      || null
+    );
+  };
+
+  const inviteMembers = async (brainId) => {
+    const keywords = [...new Set(members.map((member) => member.trim()).filter(Boolean))];
+    if (!keywords.length) {
+      return { addedCount: 0, failedKeywords: [] };
+    }
+
+    const foundUserIds = [];
+    const failedKeywords = [];
+
+    // 각 입력값을 실제 사용자 UUID로 변환합니다. 이름 검색은 중복 가능성이 있어 첫 번째 결과를 사용합니다.
+    for (const keyword of keywords) {
+      try {
+        const target = await findInviteTarget(brainId, keyword);
+        if (target) {
+          foundUserIds.push(target.id);
+        } else {
+          failedKeywords.push(keyword);
+        }
+      } catch {
+        failedKeywords.push(keyword);
+      }
+    }
+
+    const users = [...new Set(foundUserIds)];
+    if (!users.length) {
+      return { addedCount: 0, failedKeywords };
+    }
+
+    // B02 API는 UUID 배열을 users 키로 받습니다.
+    await apiPost(endpoints.brains.addUsers(brainId), { users });
+    return { addedCount: users.length, failedKeywords };
   };
 
   const submit = async (event) => {
@@ -52,15 +103,25 @@ export default function BrainCreatePage() {
     const payload = {
       name: form.name.trim(),
       description: form.description.trim(),
-      joinPolicy: form.joinPolicy
+      // 체크 ON: 가입 승인 필요(PROTECTED), 체크 OFF: 누구나 가입 가능(PUBLIC)
+      joinPolicy: form.joinPolicy ? "PROTECTED" : "PUBLIC"
     };
 
     setIsSubmitting(true);
     setStatus("");
 
     try {
+      await apiGet(endpoints.users.me);
       const created = await apiPost(endpoints.brains.create, payload);
       const brainId = String(created?.id);
+      let inviteResult = { addedCount: 0, failedKeywords: [] };
+
+      try {
+        inviteResult = await inviteMembers(brainId);
+      } catch {
+        inviteResult = { addedCount: 0, failedKeywords: members };
+      }
+
       const workspace = {
         activeBrainId: brainId,
         activeTopicId: null,
@@ -70,7 +131,7 @@ export default function BrainCreatePage() {
           description: created?.description || payload.description,
           joinPolicy: payload.joinPolicy,
           owner: "나",
-          members: 1,
+          members: 1 + inviteResult.addedCount,
           topicsCount: Array.isArray(created?.topics) ? created.topics.length : 0
         }],
         topics: [],
@@ -79,9 +140,19 @@ export default function BrainCreatePage() {
         activities: []
       };
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
+
+      if (inviteResult.failedKeywords.length) {
+        setStatus(`Brain 생성 완료 · 추가 실패: ${inviteResult.failedKeywords.join(", ")}`);
+        window.setTimeout(() => moveTo("/main"), 900);
+        return;
+      }
+
       moveTo("/main");
     } catch (error) {
-      setStatus(`Brain 생성 실패 · ${error.message}`);
+      const message = error.message.includes("인증") || error.message.includes("쿠키")
+        ? "Brain 생성은 로그인된 실제 계정으로 가능합니다. 관리자 페이지 확인용 임시 로그인은 WAS 인증 토큰이 없습니다."
+        : error.message;
+      setStatus(`Brain 생성 실패 · ${message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -125,7 +196,7 @@ export default function BrainCreatePage() {
               <span>초대할 멤버 검색</span>
               <input name="memberKeyword" type="text" value={form.memberKeyword} onChange={updateField} placeholder="이름 또는 이메일" />
             </label>
-            <button type="button" onClick={addMember}>검색</button>
+            <button type="button" onClick={addMember}>추가</button>
           </div>
 
           <div className="selected-members">
@@ -146,7 +217,7 @@ export default function BrainCreatePage() {
 
           <label className="join-policy-toggle">
             <input name="joinPolicy" type="checkbox" checked={form.joinPolicy} onChange={updateField} />
-            <span>가입 정책 공개 / 초대한정</span>
+            <span>가입 승인 필요</span>
           </label>
 
           <button className="brain-create-submit" type="submit" disabled={isSubmitting || !canCreate}>

@@ -28,6 +28,9 @@ export const endpoints = {
     list: "/brains",
     search: (name = "", page = 0, size = 9) => `/brains?${query({ name, page, size })}`,
     create: "/brains",
+    addUsers: (brainId) => `/brains/${brainId}/users`,
+    availableUsers: (brainId, keyword = "", page = 0, size = 9) => `/brains/${brainId}/available-users?${query({ keyword, page, size })}`,
+    members: (brainId, page = 0, size = 9) => `/brains/${brainId}/users?${query({ page, size })}`,
     registerTopics: (brainId) => `/brains/${brainId}/topics`,
     topics: (brainId) => `/brains/${brainId}/topics`,
     topicDetail: (brainId, topicId) => `/brains/${brainId}/topics/${topicId}`
@@ -80,9 +83,12 @@ export const endpointMeta = {
     mine: { code: "B04", method: "GET" },
     list: { code: "B05", method: "GET" },
     create: { code: "B06", method: "POST" },
+    addUsers: { code: "B02", method: "POST" },
+    availableUsers: { code: "B12", method: "GET" },
     registerTopics: { code: "B09", method: "POST" },
     topics: { code: "B10", method: "GET" },
-    topicDetail: { code: "B16", method: "GET" }
+    topicDetail: { code: "B16", method: "GET" },
+    members: { code: "B17", method: "GET" }
   },
   topics: {
     list: { code: "T01", method: "GET" },
