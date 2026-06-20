@@ -63,34 +63,6 @@ export const createBrainWorkspace = ({ id, name, description, joinPolicy, member
     { id: "node-13", title: "ERD 작성", comments: 4 },
     { id: "node-14", title: "운영 체크", comments: 6 }
   ],
-  notifications: [
-    {
-      id: "comment-1",
-      brain: name,
-      topic: "Database Design",
-      nodeId: "node-1",
-      node: "정규화 기준",
-      author: "김승제",
-      type: "comment"
-    },
-    {
-      id: "comment-2",
-      brain: name,
-      topic: "Database Design",
-      nodeId: "node-3",
-      node: "인덱스 설계",
-      author: "백성수",
-      type: "comment"
-    }
-  ],
-  activities: [
-    {
-      id: "activity-1",
-      type: "created",
-      user: "나",
-      text: `created brain ${name}`,
-      time: "just now",
-      route: `/brains/${id}`
-    }
-  ]
+  notifications: [],
+  activities: []
 });

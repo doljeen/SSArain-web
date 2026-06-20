@@ -977,6 +977,45 @@ export default function MainPage() {
     }));
   };
 
+  // WAS에 알림 목록 API가 아직 없어, 댓글 작성 직후 현재 화면의 알림/활동만 즉시 갱신합니다.
+  const pushLocalCommentActivity = (nodeId, comment, content, isReply = false) => {
+    const now = new Date().toISOString();
+    const nodeTitle = nodeDetail.data?.title || "Neuron";
+    const author = comment?.writer || pageData.user.name || "작성자";
+    const topicName = activeTopic?.name || "Topic";
+    const brainName = activeBrain?.name || "Brain";
+    const activityId = comment?.id || `${nodeId}-${Date.now()}`;
+
+    setPageData((current) => ({
+      ...current,
+      notifications: [
+        {
+          id: `notice-comment-${activityId}`,
+          brain: brainName,
+          topic: topicName,
+          nodeId,
+          node: nodeTitle,
+          author,
+          type: "comment",
+          createdAt: comment?.createdAt || now
+        },
+        ...(current.notifications || [])
+      ].slice(0, 6),
+      activities: [
+        {
+          id: `activity-comment-${activityId}`,
+          type: "commented",
+          user: author,
+          text: `${nodeTitle}에 ${isReply ? "답글" : "댓글"}을 작성했습니다.`,
+          time: "방금 전",
+          route: `/nodes/${nodeId}`,
+          preview: content
+        },
+        ...(current.activities || [])
+      ].slice(0, 8)
+    }));
+  };
+
   const removeCommentWithReplies = (comments, commentId) => {
     const deletedIds = new Set([String(commentId)]);
     let changed = true;
@@ -1041,6 +1080,7 @@ export default function MainPage() {
           : current.data
       }));
       syncNodeCommentCount(nodeId, nextComments.length);
+      pushLocalCommentActivity(nodeId, nextComment, content, Boolean(commentDraft.parentId));
       resetCommentDraft();
       showToast(commentDraft.parentId ? "답글 작성 완료" : "댓글 작성 완료");
     } catch (error) {

@@ -10,34 +10,24 @@ const AUTH_STATE_KEY = "ssarain-authenticated";
 const activitySections = [
   {
     id: "nodes",
-    title: "내가 작성한 노드",
-    count: 3,
+    title: "내가 작성한 뉴런",
+    count: 0,
     icon: "file",
-    items: [
-      { id: "node-1", title: "정규화 기준", meta: "Database Design · 댓글 6개", route: "/nodes/node-1" },
-      { id: "node-3", title: "인덱스 설계", meta: "Database Design · 댓글 9개", route: "/nodes/node-3" },
-      { id: "node-9", title: "스키마 리뷰", meta: "Backend Guild · 댓글 8개", route: "/nodes/node-9" }
-    ]
+    items: []
   },
   {
     id: "comments",
     title: "내가 작성한 댓글",
-    count: 2,
+    count: 0,
     icon: "bell",
-    items: [
-      { id: "comment-1", title: "트랜잭션 격리 수준 다시 확인 필요", meta: "정규화 기준 · 2h ago", route: "/comments/comment-1" },
-      { id: "comment-2", title: "읽기 모델 분리 기준을 추가하면 좋겠습니다", meta: "읽기 모델 · 1d ago", route: "/comments/comment-2" }
-    ]
+    items: []
   },
   {
     id: "thumbs",
-    title: "추천한 노드",
-    count: 2,
+    title: "추천한 뉴런",
+    count: 0,
     icon: "plus",
-    items: [
-      { id: "thumb-1", title: "쿼리 최적화", meta: "Database Design · 추천함", route: "/nodes/node-8" },
-      { id: "thumb-2", title: "ERD 작성", meta: "Backend Guild · 추천함", route: "/nodes/node-13" }
-    ]
+    items: []
   }
 ];
 
@@ -176,7 +166,7 @@ export default function MyPage() {
         </article>
 
         <section className="mypage-grid">
-          {/* 내 노드/댓글/추천 활동이 들어가는 영역입니다. 현재 WAS 목록 API가 없어 예시 데이터로 배치합니다. */}
+          {/* WAS /user 통계로 개수를 보여주고, 상세 목록은 목록 API가 생기면 연결합니다. */}
           <section className="activity-panel" aria-labelledby="activity-heading">
             <div className="activity-panel-head">
               <div>
@@ -210,7 +200,7 @@ export default function MyPage() {
             </div>
 
             <div className="mypage-activity-list">
-              {selectedActivity.items.map((item) => (
+              {selectedActivity.items.length > 0 ? selectedActivity.items.map((item) => (
                 <button key={item.id} className="mypage-activity-item" type="button" onClick={() => moveTo(item.route)}>
                   <span className="mypage-activity-icon"><Icon name={selectedActivity.icon} /></span>
                   <span>
@@ -218,7 +208,13 @@ export default function MyPage() {
                     <small>{item.meta}</small>
                   </span>
                 </button>
-              ))}
+              )) : (
+                <div className="mypage-activity-empty">
+                  <Icon name={selectedActivity.icon} />
+                  <strong>{selectedActivity.title} {selectedActivity.count}개</strong>
+                  <span>상세 목록 API가 추가되면 이 영역에 실제 목록을 연결합니다.</span>
+                </div>
+              )}
             </div>
           </section>
 

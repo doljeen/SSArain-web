@@ -316,6 +316,37 @@
   font-weight: 740;
 }
 
+.mypage-activity-empty {
+  min-height: 150px;
+  padding: 28px;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  border: 1px dashed #d8e3f3;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  text-align: center;
+}
+
+.mypage-activity-empty svg {
+  width: 32px;
+  height: 32px;
+  color: var(--color-purple-strong);
+}
+
+.mypage-activity-empty strong {
+  color: #253246;
+  font-size: 15px;
+  font-weight: 860;
+}
+
+.mypage-activity-empty span {
+  color: #7b8798;
+  font-size: 13px;
+  font-weight: 740;
+}
+
 .password-panel,
 .mypage-side-panel {
   border: 1px solid var(--color-line);

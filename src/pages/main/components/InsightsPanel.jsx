@@ -30,24 +30,28 @@ export default function InsightsPanel({ activeBrain, isAuthenticated, pageData, 
       <section className="notification-section" aria-labelledby="notice-heading">
         <div className="activity-head"><h3 id="notice-heading">알림창</h3><button type="button" onClick={(event) => onRoute(event, "/notifications")}>View All</button></div>
         <div className="notice-list">
-          {pageData.notifications.map((notice) => (
+          {pageData.notifications.length > 0 ? pageData.notifications.map((notice) => (
             <button className="notice-card" type="button" key={notice.id} data-endpoint={endpoints.nodes.detail(notice.nodeId)} onClick={(event) => onRoute(event, `/nodes/${notice.nodeId}`)}>
               <strong>{notice.brain} ({notice.topic})</strong>
               <span>{notice.node}에 {notice.author}님이<br />댓글을 작성하였습니다.</span>
             </button>
-          ))}
+          )) : (
+            <p className="panel-empty-state">새 알림이 없습니다.</p>
+          )}
         </div>
       </section>
       {/* Recent Activity: 최근 작업 이력을 시간순 목록으로 보여줍니다. */}
       <section className="activity-section" aria-labelledby="activity-heading">
         <div className="activity-head"><h3 id="activity-heading">Recent Activity</h3><button type="button" onClick={(event) => onRoute(event, "/activity")}>View All</button></div>
         <div className="activity-list">
-          {pageData.activities.map((activity) => (
+          {pageData.activities.length > 0 ? pageData.activities.map((activity) => (
             <button className="activity-item" type="button" key={activity.id} onClick={(event) => onRoute(event, activity.route)}>
               <span className={`activity-icon ${activity.type}`}><Icon name={getActivityIcon(activity.type)} /></span>
               <span className="activity-copy"><strong>{activity.user}</strong> {activity.text}<small><Icon name="clock" className="tiny-icon" />{activity.time}</small></span>
             </button>
-          ))}
+          )) : (
+            <p className="panel-empty-state">최근 활동이 없습니다.</p>
+          )}
         </div>
       </section>
         </>
