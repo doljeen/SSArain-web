@@ -26,6 +26,8 @@ export const normalizeNodes = (nodes = []) => nodes.map((node) => ({
   id: String(node.nid),
   title: node.title,
   content: node.content,
+  writer: node.writer || "",
+  createdAt: node.createdAt || "",
   comments: 0
 }));
 

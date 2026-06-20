@@ -47,6 +47,7 @@ const getBrainIdFromRoute = (path) => {
 };
 
 const isBrainSearchRoute = (path) => path === "/brains/search";
+const getViewFromRoute = (path) => path.includes("/posts") ? "posts" : "synapse";
 const canUseManageMode = (role) => ["ADMIN", "MANAGER", "LEADER"].includes(String(role || "").toUpperCase());
 const isTopicUsing = (value) => value === true || value === "true" || value === 1 || value === "1";
 const rootScatterPositions = [
@@ -194,6 +195,7 @@ export default function MainPage() {
 
   // 모달, 토스트, API 연결 상태, 그래프 이동 애니메이션 상태입니다.
   const [modal, setModal] = useState(null);
+  const [nodeDraft, setNodeDraft] = useState({ isOpen: false, title: "", content: "", status: "", isSubmitting: false });
   const [toast, setToast] = useState("");
   const [apiStatus, setApiStatus] = useState("mock");
   const [flying, setFlying] = useState(false);
@@ -303,12 +305,12 @@ export default function MainPage() {
   };
 
   // BrainTopic 상세 API에서 현재 Topic에 연결된 Node 목록을 가져옵니다.
-  const fetchTopicNodes = async (brainId, topicId) => {
-    if (!brainId || !topicId) return [];
+  const fetchTopicNodes = async (brainId, topic) => {
+    if (!brainId || !topic?.btid) return [];
 
     try {
-      const detail = await apiGet(endpoints.brains.topicDetail(brainId, topicId));
-      return normalizeNodes(detail?.nodes || []);
+      const result = await apiGet(endpoints.nodes.preview(topic.btid));
+      return normalizeNodes(result?.neuronPreviewList || []);
     } catch (error) {
       return [];
     }
@@ -324,7 +326,7 @@ export default function MainPage() {
       const visibleTopics = visibleTopicTree(topics);
       const flatTopics = flattenTopics(visibleTopics);
       const selectedTopic = flatTopics.find((topic) => String(topic.id) === String(requestedTopicId)) || flatTopics[0] || null;
-      const nodes = selectedTopic ? await fetchTopicNodes(brainId, selectedTopic.id) : [];
+      const nodes = selectedTopic ? await fetchTopicNodes(brainId, selectedTopic) : [];
       const normalizedBrain = normalizeBrain({ ...detail, topics: detail?.topics || [] });
 
       setPageData((current) => ({
@@ -379,7 +381,7 @@ export default function MainPage() {
         const routedTopicId = getTopicIdFromRoute(route);
         const selectedTopic = flatTopics.find((topic) => String(topic.id) === String(routedTopicId)) || flatTopics[0] || null;
         activeTopicId = selectedTopic ? String(selectedTopic.id) : null;
-        nodes = selectedTopic ? await fetchTopicNodes(selectedBrain.id, selectedTopic.id) : [];
+        nodes = selectedTopic ? await fetchTopicNodes(selectedBrain.id, selectedTopic) : [];
         topics = visibleTopics;
 
         const detailBrain = normalizeBrain({ ...brainDetail, topics: brainDetail?.topics || [] });
@@ -443,6 +445,7 @@ export default function MainPage() {
   useEffect(() => {
     // 첫 진입 시 route와 body data를 동기화하고 WAS 데이터를 불러옵니다.
     syncDocumentRoute(route);
+    setView(getViewFromRoute(route));
 
     const createdWorkspace = window.sessionStorage.getItem(CREATED_WORKSPACE_KEY);
     if (createdWorkspace) {
@@ -470,6 +473,7 @@ export default function MainPage() {
       const nextRoute = getCurrentRoute();
       setRoute(nextRoute);
       syncDocumentRoute(nextRoute);
+      setView(getViewFromRoute(nextRoute));
       const routedTopicId = getTopicIdFromRoute(nextRoute);
       if (routedTopicId) {
         setPageData((current) => ({ ...current, activeTopicId: routedTopicId }));
@@ -560,6 +564,68 @@ export default function MainPage() {
     window.setTimeout(() => setToast(""), 2600);
   };
 
+  const openNodeCreateModal = () => {
+    if (!activeTopic) {
+      showToast("Topic을 먼저 선택해주세요.");
+      return;
+    }
+
+    if (!activeTopic.btid) {
+      showToast("Brain에 표시된 Topic에서만 Neuron을 작성할 수 있습니다.");
+      return;
+    }
+
+    setNodeDraft({ isOpen: true, title: "", content: "", status: "", isSubmitting: false });
+  };
+
+  const closeNodeCreateModal = () => {
+    setNodeDraft({ isOpen: false, title: "", content: "", status: "", isSubmitting: false });
+  };
+
+  const updateNodeDraft = (event) => {
+    const { name, value } = event.target;
+    setNodeDraft((current) => ({ ...current, [name]: value, status: "" }));
+  };
+
+  const submitNodeDraft = async (event) => {
+    event.preventDefault();
+
+    if (!activeTopic?.btid) {
+      setNodeDraft((current) => ({ ...current, status: "Brain Topic 연결 정보가 없습니다." }));
+      return;
+    }
+
+    const title = nodeDraft.title.trim();
+    const content = nodeDraft.content.trim();
+
+    if (!title || !content) {
+      setNodeDraft((current) => ({ ...current, status: "제목과 내용을 모두 입력해주세요." }));
+      return;
+    }
+
+    setNodeDraft((current) => ({ ...current, isSubmitting: true, status: "" }));
+
+    try {
+      const created = await apiPost(endpoints.nodes.create, {
+        title,
+        content,
+        btid: Number(activeTopic.btid)
+      });
+      const nextNode = normalizeNodes([created])[0];
+      setPageData((current) => ({
+        ...current,
+        nodes: [nextNode, ...current.nodes]
+      }));
+      closeNodeCreateModal();
+      setView("posts");
+      routeTo(`/topics/${activeTopic.id}/posts`);
+      setRoute(`/topics/${activeTopic.id}/posts`);
+      showToast(`${created.title || title} Neuron 작성 완료`);
+    } catch (error) {
+      setNodeDraft((current) => ({ ...current, isSubmitting: false, status: `Neuron 작성 실패 · ${error.message}` }));
+    }
+  };
+
   // 모달 확인 버튼 처리입니다. 현재는 Topic 생성만 실제 WAS API에 연결되어 있습니다.
   const confirmModal = async () => {
     const copy = modalCopy[modal];
@@ -644,22 +710,25 @@ export default function MainPage() {
   // Topic 클릭 시 실제 화면에 그려진 Topic Tree 좌표로 그래프 카메라를 이동합니다.
   const moveToTopic = (event, topicId, options = {}) => {
     const shouldUpdateRoute = options.updateRoute !== false;
+    const shouldOpenPosts = options.openPosts === true;
 
     if (suppressNextClick.current) {
-      if (shouldUpdateRoute) handleRouteClick(event, `/topics/${topicId}`);
+      if (shouldUpdateRoute) handleRouteClick(event, shouldOpenPosts ? `/topics/${topicId}/posts` : `/topics/${topicId}`);
       return;
     }
 
     const targetPoint = topicLayoutPoints.find((point) => String(point.topic.id) === String(topicId));
     if (targetPoint) focusGraphPoint(targetPoint.x, targetPoint.y, 1.35);
 
+    const selectedTopic = topicsFlat.find((topic) => String(topic.id) === String(topicId)) || null;
+    if (shouldOpenPosts) setView("posts");
     setPageData((current) => ({ ...current, activeTopicId: topicId }));
     if (activeBrain) {
-      fetchTopicNodes(activeBrain.id, topicId).then((nodes) => {
+      fetchTopicNodes(activeBrain.id, selectedTopic).then((nodes) => {
         setPageData((current) => String(current.activeTopicId) === String(topicId) ? { ...current, nodes } : current);
       });
     }
-    if (shouldUpdateRoute) handleRouteClick(event, `/topics/${topicId}`);
+    if (shouldUpdateRoute) handleRouteClick(event, shouldOpenPosts ? `/topics/${topicId}/posts` : `/topics/${topicId}`);
   };
 
   // 그래프 빈 영역을 누르면 pan 시작 정보를 저장합니다.
@@ -867,6 +936,7 @@ export default function MainPage() {
         onFocusPoint={focusGraphPoint}
         onJoinBrain={requestJoinBrain}
         onMoveToTopic={moveToTopic}
+        onOpenNodeModal={openNodeCreateModal}
         onOpenModal={setModal}
         onOpenTopicPanel={openTopicPanel}
         onSearchBrains={searchBrains}
@@ -897,6 +967,35 @@ export default function MainPage() {
       {/* 전역 피드백 UI입니다. 알림창은 헤더 버튼에서 열고 닫습니다. */}
       {toast && <div className="toast" role="status">{toast}</div>}
       {modal && <MainModal copy={modalCopy[modal]} onClose={() => setModal(null)} onConfirm={confirmModal} />}
+      {nodeDraft.isOpen && (
+        <div className="node-modal-backdrop" role="presentation" onClick={closeNodeCreateModal}>
+          <section className="node-create-modal" role="dialog" aria-modal="true" aria-labelledby="node-create-title" onClick={(event) => event.stopPropagation()}>
+            <div className="node-create-head">
+              <div>
+                <p className="panel-kicker">CREATE NODE</p>
+                <h2 id="node-create-title">{activeTopic?.name} Neuron 작성</h2>
+              </div>
+              <button type="button" onClick={closeNodeCreateModal} aria-label="닫기">×</button>
+            </div>
+
+            <form className="node-create-form" onSubmit={submitNodeDraft}>
+              <label>
+                <span>제목</span>
+                <input name="title" type="text" value={nodeDraft.title} onChange={updateNodeDraft} placeholder="Neuron 제목" maxLength={100} required />
+              </label>
+              <label>
+                <span>내용</span>
+                <textarea name="content" value={nodeDraft.content} onChange={updateNodeDraft} placeholder="정리할 내용을 작성해주세요." rows={9} required />
+              </label>
+              <div className="node-create-actions">
+                <button type="button" onClick={closeNodeCreateModal}>취소</button>
+                <button type="submit" disabled={nodeDraft.isSubmitting}>{nodeDraft.isSubmitting ? "작성 중" : "뉴런 추가"}</button>
+              </div>
+              {nodeDraft.status && <p className="node-create-status" role="status">{nodeDraft.status}</p>}
+            </form>
+          </section>
+        </div>
+      )}
       {topicPanelMode && (
         <TopicManagerPanel
           mode={topicPanelMode}

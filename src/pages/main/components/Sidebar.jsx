@@ -65,7 +65,7 @@ export default function Sidebar({
               </button>
               <div className="tree-children">
                 {(topic.children || []).map((child) => (
-                  <button key={child.id} className={`tree-child ${child.id === pageData.activeTopicId ? "is-active" : ""}`} type="button" data-endpoint={activeBrain ? endpoints.nodes.preview(activeBrain.id, child.id) : ""} onClick={(event) => onMoveToTopic(event, child.id)}>
+                  <button key={child.id} className={`tree-child ${child.id === pageData.activeTopicId ? "is-active" : ""}`} type="button" data-endpoint={child.btid ? endpoints.nodes.preview(child.btid) : ""} onClick={(event) => onMoveToTopic(event, child.id)}>
                     <Icon name="folder" />
                     <span>{child.name}</span>
                   </button>

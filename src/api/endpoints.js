@@ -46,11 +46,11 @@ export const endpoints = {
   },
   // Node 미리보기/상세/생성/수정/삭제 엔드포인트입니다.
   nodes: {
-    preview: (brainId, topicId) => `/nodes/preview?${query({ brain: brainId, topic: topicId })}`,
-    detail: (nodeId) => `/nodes/${nodeId}`,
-    create: "/nodes",
-    update: (nodeId) => `/nodes/${nodeId}`,
-    remove: (nodeId) => `/nodes/${nodeId}`
+    preview: (brainTopicId) => `/neurons/preview/${brainTopicId}`,
+    detail: (nodeId) => `/neurons/${nodeId}`,
+    create: "/neurons",
+    update: (nodeId) => `/neurons/${nodeId}`,
+    remove: (nodeId) => `/neurons/${nodeId}`
   },
   // 댓글 관련 엔드포인트입니다.
   comments: {

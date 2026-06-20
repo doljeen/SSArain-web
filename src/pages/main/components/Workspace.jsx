@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import Icon from "../../../shared/icons/Icon.jsx";
 
 const lineStyle = (fromX, fromY, toX, toY) => {
@@ -95,13 +96,13 @@ const TopicTreeGraph = ({ rootTopics, activeTopic, onMoveToTopic }) => {
       ))}
 
       {rootNodes.map((node) => (
-        <button className={`topic-map-node is-root ${node.isActive ? "is-active" : ""}`} key={node.topic.id} type="button" style={{ "--node-x": `${node.x}px`, "--node-y": `${node.y}px` }} onClick={(event) => onMoveToTopic(event, node.topic.id, { updateRoute: false })}>
+        <button className={`topic-map-node is-root ${node.isActive ? "is-active" : ""}`} key={node.topic.id} type="button" style={{ "--node-x": `${node.x}px`, "--node-y": `${node.y}px` }} onClick={(event) => onMoveToTopic(event, node.topic.id, { openPosts: true })}>
           <span>{node.topic.name}</span>
         </button>
       ))}
 
       {descendantNodes.map((node) => (
-        <button className={`topic-map-node ${node.depth > 1 ? "is-small" : ""} ${node.isPath ? "is-path" : ""} ${node.isSelected ? "is-selected" : ""}`} key={node.topic.id} type="button" style={{ "--node-x": `${node.x}px`, "--node-y": `${node.y}px` }} onClick={(event) => onMoveToTopic(event, node.topic.id, { updateRoute: false })}>
+        <button className={`topic-map-node ${node.depth > 1 ? "is-small" : ""} ${node.isPath ? "is-path" : ""} ${node.isSelected ? "is-selected" : ""}`} key={node.topic.id} type="button" style={{ "--node-x": `${node.x}px`, "--node-y": `${node.y}px` }} onClick={(event) => onMoveToTopic(event, node.topic.id, { openPosts: true })}>
           <span>{node.topic.name}</span>
         </button>
       ))}
@@ -143,13 +144,24 @@ export default function Workspace({
   onSetView,
   onZoom,
   onOpenModal,
+  onOpenNodeModal,
   onOpenTopicPanel,
   isRightPanelOpen,
   onToggleManageMode,
   onToggleRight
 }) {
+  const [postQuery, setPostQuery] = useState("");
   const hasActiveTopic = Boolean(activeTopic);
   const visibleRootTopics = pageData.topics || [];
+  const filteredNodes = useMemo(() => {
+    const keyword = postQuery.trim().toLowerCase();
+    if (!keyword) return pageData.nodes;
+    return pageData.nodes.filter((node) => (
+      node.title?.toLowerCase().includes(keyword)
+      || node.content?.toLowerCase().includes(keyword)
+      || node.writer?.toLowerCase().includes(keyword)
+    ));
+  }, [pageData.nodes, postQuery]);
 
   const submitBrainSearch = (event) => {
     event.preventDefault();
@@ -268,12 +280,44 @@ export default function Workspace({
           ) : view === "posts" && hasActiveTopic ? (
           // Post List 보기에서는 현재 Topic의 문서 목록 형태로 노드를 보여줍니다.
           <div className="post-list">
-            {pageData.nodes.slice(0, 8).map((node) => (
-              <button className="post-row" type="button" key={node.id} onClick={() => onFocusPoint(0, 0, 1.35)}>
-                <span className="post-icon"><Icon name="file" /></span>
-                <span><strong>{node.title}</strong><small>{activeTopic.name} · 댓글 {node.comments}개</small></span>
-              </button>
-            ))}
+            <div className="post-list-header">
+              <div>
+                <p className="panel-kicker">POST LIST</p>
+                <h1>{activeTopic.name}</h1>
+              </div>
+              <div className="post-list-tools">
+                <label className="post-search">
+                  <Icon name="search" />
+                  <input type="search" value={postQuery} onChange={(event) => setPostQuery(event.target.value)} placeholder="Neuron 검색" />
+                </label>
+                <button className="node-create-button" type="button" onClick={onOpenNodeModal}>
+                  <Icon name="plus" />
+                  <span>뉴런 추가</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="post-card-list">
+              {filteredNodes.map((node) => (
+                <button className="post-card" type="button" key={node.id} onClick={(event) => onRoute(event, `/nodes/${node.id}`)}>
+                  <span className="post-topic"><Icon name="folder" />{activeTopic.name}</span>
+                  <strong>{node.title}</strong>
+                  <p>{node.content || "내용이 없습니다."}</p>
+                  <span className="post-card-meta">
+                    <span><Icon name="user" />{node.writer || pageData.user.name || "작성자"}</span>
+                    <span><Icon name="bell" />댓글 {node.comments || 0}개</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {!filteredNodes.length && (
+              <div className="post-empty-state">
+                <Icon name="file" />
+                <strong>{postQuery ? "검색 결과가 없습니다." : "아직 작성된 Neuron이 없습니다."}</strong>
+                <span>{postQuery ? "다른 검색어로 다시 찾아보세요." : "뉴런 추가 버튼으로 첫 글을 작성해보세요."}</span>
+              </div>
+            )}
           </div>
           ) : null}
           {manageMode && canManageWorkspace && (
