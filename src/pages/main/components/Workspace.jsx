@@ -180,9 +180,17 @@ export default function Workspace({
   onOpenNodeModal,
   onOpenTopicPanel,
   nodeDetail,
+  quizState,
+  quizGenerationCount,
+  quizGenerationLimit,
   commentDraft,
   onCloseNodeDetail,
   onToggleNodeRecommend,
+  onOpenQuiz,
+  onGenerateQuiz,
+  onSelectQuizOption,
+  onSubmitQuiz,
+  onResetQuiz,
   onUpdateCommentDraft,
   onSubmitComment,
   onStartCommentReply,
@@ -214,6 +222,16 @@ export default function Workspace({
   const currentUserName = pageData.user?.name || "";
   const currentRole = String(pageData.user?.role || "").toUpperCase();
   const canModerateComments = ["ADMIN", "MANAGER", "LEADER"].includes(currentRole);
+  const canGenerateQuiz = canManageWorkspace && manageMode && ["ADMIN", "MANAGER", "LEADER"].includes(currentRole);
+  const quizLimitReached = Number(quizGenerationCount || 0) >= Number(quizGenerationLimit || 2);
+  const quizScore = useMemo(() => {
+    if (!quizState?.quizzes?.length) return { correct: 0, total: 0 };
+    const correct = quizState.quizzes.reduce((score, quiz) => {
+      const selectedIndex = quizState.answers?.[String(quiz.id)];
+      return score + (quiz.options?.[selectedIndex]?.isCorrect ? 1 : 0);
+    }, 0);
+    return { correct, total: quizState.quizzes.length };
+  }, [quizState?.answers, quizState?.quizzes]);
 
   const renderComment = (comment, depth = 0) => {
     const canEditComment = canModerateComments || (currentUserName && comment.writer === currentUserName);
@@ -355,6 +373,24 @@ export default function Workspace({
             <div className="graph-viewport" style={{ "--pan-x": `${graph.x}px`, "--pan-y": `${graph.y}px`, "--zoom": graph.scale, "--tilt": `${graph.tilt || 0}deg` }}>
               <TopicTreeGraph rootTopics={visibleRootTopics} activeTopic={activeTopic} onMoveToTopic={onMoveToTopic} />
             </div>
+            {canGenerateQuiz && (
+              <div className="quiz-manage-panel" aria-live="polite">
+                <button className="quiz-manage-create" type="button" onClick={onGenerateQuiz} disabled={quizState.isGenerating || quizLimitReached}>
+                  <Icon name="file" />
+                  <span>{quizState.isGenerating ? "퀴즈 생성 중" : quizLimitReached ? "퀴즈 생성 완료" : "퀴즈 생성"}</span>
+                </button>
+                <small className="quiz-generation-count">{quizGenerationCount || 0} / {quizGenerationLimit || 2}회 생성</small>
+                {(quizState.isGenerating || quizState.status || quizLimitReached) && (
+                  <p className={`quiz-generation-status ${quizState.status?.includes("실패") ? "is-error" : ""}`}>
+                    {quizState.isGenerating ? "퀴즈를 생성하는 중입니다." : quizState.status || "이 Topic은 퀴즈를 최대 2번 생성했습니다."}
+                  </p>
+                )}
+              </div>
+            )}
+            <button className="quiz-floating-cta" type="button" onClick={onOpenQuiz}>
+              <Icon name="file" />
+              <span>퀴즈를 확인해보세요</span>
+            </button>
             {/* 그래프 확대/축소와 위치 초기화 컨트롤입니다. */}
             <div className="zoom-controls" aria-label="그래프 확대 축소">
               <button type="button" onClick={() => onZoom(graph.scale / 1.15, window.innerWidth / 2, window.innerHeight / 2)} aria-label="축소">-</button>
@@ -362,6 +398,82 @@ export default function Workspace({
               <button type="button" onClick={() => onZoom(graph.scale * 1.15, window.innerWidth / 2, window.innerHeight / 2)} aria-label="확대">+</button>
             </div>
           </>
+          ) : view === "quiz" && hasActiveTopic ? (
+          <section className="quiz-view" aria-label={`${activeTopic.name} 퀴즈`}>
+            <div className="quiz-view-header">
+              <div>
+                <p className="panel-kicker">QUIZ</p>
+                <h1>{activeTopic.name}</h1>
+                <span>Topic 기반으로 생성된 문제를 풀어보세요.</span>
+              </div>
+              <div className="quiz-header-actions">
+                <button className="quiz-back-button" type="button" onClick={(event) => { onRoute(event, activeTopic ? `/topics/${activeTopic.id}/synapse` : "/main/synapse"); onSetView("synapse"); }}>
+                  Synapse로 돌아가기
+                </button>
+              </div>
+            </div>
+
+            {quizState.isLoading ? (
+              <div className="quiz-empty-state">
+                <Icon name="file" />
+                <strong>퀴즈를 불러오는 중입니다.</strong>
+              </div>
+            ) : quizState.quizzes.length ? (
+              <>
+                {quizState.status && <p className="quiz-status" role="status">{quizState.status}</p>}
+                <div className="quiz-list">
+                  {quizState.quizzes.map((quiz, quizIndex) => (
+                    <article className="quiz-card" key={quiz.id}>
+                      <div className="quiz-question">
+                        <span>Quiz {quizIndex + 1}</span>
+                        <h2>{quiz.question}</h2>
+                      </div>
+                      <div className="quiz-options">
+                        {quiz.options.map((option, optionIndex) => {
+                          const selectedIndex = quizState.answers?.[String(quiz.id)];
+                          const isSelected = selectedIndex === optionIndex;
+                          const showResult = quizState.submitted;
+                          const optionClass = [
+                            "quiz-option",
+                            isSelected ? "is-selected" : "",
+                            showResult && option.isCorrect ? "is-correct" : "",
+                            showResult && isSelected && !option.isCorrect ? "is-wrong" : ""
+                          ].filter(Boolean).join(" ");
+
+                          return (
+                            <button className={optionClass} type="button" key={option.id} onClick={() => onSelectQuizOption(quiz.id, optionIndex)} disabled={showResult}>
+                              <span>{String.fromCharCode(65 + optionIndex)}</span>
+                              <strong>{option.text}</strong>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {quizState.submitted && quiz.explanation && (
+                        <p className="quiz-explanation">{quiz.explanation}</p>
+                      )}
+                    </article>
+                  ))}
+                </div>
+                <div className="quiz-submit-bar">
+                  {quizState.submitted ? (
+                    <strong>{quizScore.total}문제 중 {quizScore.correct}문제 정답</strong>
+                  ) : (
+                    <span>{Object.keys(quizState.answers || {}).length} / {quizState.quizzes.length}문제 선택</span>
+                  )}
+                  <div>
+                    {quizState.submitted && <button type="button" onClick={onResetQuiz}>다시 풀기</button>}
+                    <button className="quiz-submit-button" type="button" onClick={onSubmitQuiz} disabled={quizState.submitted}>정답 확인</button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="quiz-empty-state">
+                <Icon name="file" />
+                <strong>{quizState.status || "퀴즈가 생성되어있지 않았습니다."}</strong>
+                <span>관리자가 퀴즈를 생성하면 이곳에서 풀 수 있습니다.</span>
+              </div>
+            )}
+          </section>
           ) : view === "posts" && hasActiveTopic && nodeDetail?.isOpen ? (
           <article className="neuron-detail" aria-label="Neuron 상세">
             <button className="neuron-back-button" type="button" onClick={onCloseNodeDetail}>
@@ -479,7 +591,7 @@ export default function Workspace({
             </div>
           </div>
           ) : null}
-          {manageMode && canManageWorkspace && (
+          {view === "synapse" && manageMode && canManageWorkspace && (
             <div className="manage-action-dock" aria-label="Topic management actions">
               <button className="manage-action-button" type="button" onClick={() => onOpenTopicPanel("manage")}>
                 <span>토픽 관리</span>
@@ -491,8 +603,6 @@ export default function Workspace({
           )}
         </div>
       )}
-      {/* 도움말 모달을 여는 플로팅 버튼입니다. */}
-      <button className="help-button" type="button" onClick={(event) => { onRoute(event, "/help"); onOpenModal("help"); }} aria-label="도움말">?</button>
     </section>
   );
 }

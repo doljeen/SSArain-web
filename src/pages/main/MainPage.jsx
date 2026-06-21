@@ -10,10 +10,12 @@ import Sidebar from "./components/Sidebar.jsx";
 import TopicManagerPanel from "./components/TopicManagerPanel.jsx";
 import Workspace from "./components/Workspace.jsx";
 import { createModalCopy } from "./config/modalConfig.js";
-import { buildTopicTree, clone, flattenTopics, normalizeBrain, normalizeComments, normalizeNodeDetail, normalizeNodes, normalizeUserInfo } from "./config/mainUtils.js";
+import { buildTopicTree, clone, flattenTopics, normalizeBrain, normalizeComments, normalizeNodeDetail, normalizeNodes, normalizeQuizzes, normalizeUserInfo } from "./config/mainUtils.js";
 
 const CREATED_WORKSPACE_KEY = "ssarain-created-workspace";
 const AUTH_STATE_KEY = "ssarain-authenticated";
+const QUIZ_GENERATION_COUNTS_KEY = "ssarain-quiz-generation-counts";
+const QUIZ_GENERATION_LIMIT = 2;
 const MIN_GRAPH_SCALE = 0.72;
 const MAX_GRAPH_SCALE = 2.2;
 const MAX_GRAPH_PAN_X = 3200;
@@ -52,7 +54,7 @@ const getBrainIdFromRoute = (path) => {
 };
 
 const isBrainSearchRoute = (path) => path === "/brains/search";
-const getViewFromRoute = (path) => path.includes("/posts") || path.startsWith("/nodes/") ? "posts" : "synapse";
+const getViewFromRoute = (path) => path.includes("/quiz") ? "quiz" : path.includes("/posts") || path.startsWith("/nodes/") ? "posts" : "synapse";
 const canUseManageMode = (role) => ["ADMIN", "MANAGER", "LEADER"].includes(String(role || "").toUpperCase());
 const isTopicUsing = (value) => value === true || value === "true" || value === 1 || value === "1";
 const rootScatterPositions = [
@@ -230,6 +232,14 @@ export default function MainPage() {
   const [nodeDraft, setNodeDraft] = useState({ isOpen: false, title: "", content: "", status: "", isSubmitting: false });
   const [nodeDetail, setNodeDetail] = useState({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
   const [commentDraft, setCommentDraft] = useState({ content: "", status: "", isSubmitting: false, parentId: null, editingId: null });
+  const [quizState, setQuizState] = useState({ isLoading: false, isGenerating: false, status: "", quizzes: [], answers: {}, submitted: false });
+  const [quizGenerationCounts, setQuizGenerationCounts] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(QUIZ_GENERATION_COUNTS_KEY) || "{}");
+    } catch {
+      return {};
+    }
+  });
   const [toast, setToast] = useState("");
   const [apiStatus, setApiStatus] = useState("mock");
   const [flying, setFlying] = useState(false);
@@ -306,7 +316,8 @@ export default function MainPage() {
     const cachedTopicId = cachedState?.activeTopicId;
     const cachedView = cachedState?.view || "synapse";
     if (!cachedTopicId) return `/brains/${brainId}`;
-    return `/topics/${cachedTopicId}${cachedView === "posts" ? "/posts" : "/synapse"}`;
+    const suffix = cachedView === "posts" ? "/posts" : cachedView === "quiz" ? "/quiz" : "/synapse";
+    return `/topics/${cachedTopicId}${suffix}`;
   };
 
   const rememberActiveBrainState = () => {
@@ -397,6 +408,113 @@ export default function MainPage() {
     } catch (error) {
       return [];
     }
+  };
+
+  // 현재 BrainTopic에 저장된 퀴즈를 WAS에서 조회합니다.
+  const loadTopicQuizzes = async (topic = activeTopic) => {
+    const targetTopic = topic?.btid ? topic : await resolveActiveTopicForNeuron();
+
+    if (!targetTopic?.btid) {
+      setQuizState({ isLoading: false, isGenerating: false, status: "Brain에 표시된 Topic에서만 퀴즈를 확인할 수 있습니다.", quizzes: [], answers: {}, submitted: false });
+      return;
+    }
+
+    setQuizState((current) => ({ ...current, isLoading: true, status: "", answers: {}, submitted: false }));
+
+    try {
+      const result = await apiGet(endpoints.quizzes.list(targetTopic.btid));
+      const quizzes = normalizeQuizzes(result?.quizzes || []);
+      setQuizState({ isLoading: false, isGenerating: false, status: "", quizzes, answers: {}, submitted: false });
+    } catch (error) {
+      setQuizState({ isLoading: false, isGenerating: false, status: `퀴즈를 불러오지 못했습니다 · ${error.message}`, quizzes: [], answers: {}, submitted: false });
+    }
+  };
+
+  // 관리모드에서 WAS의 Gemini 연동 API를 호출해 Topic 기반 퀴즈를 생성합니다.
+  const generateTopicQuizzes = async () => {
+    const targetTopic = activeTopic?.btid ? activeTopic : await resolveActiveTopicForNeuron();
+
+    if (!targetTopic?.btid) {
+      setQuizState((current) => ({ ...current, status: "Brain에 표시된 Topic에서만 퀴즈를 생성할 수 있습니다." }));
+      return;
+    }
+
+    const generationKey = String(targetTopic.btid);
+    const currentCount = Number(quizGenerationCounts[generationKey] || 0);
+
+    if (currentCount >= QUIZ_GENERATION_LIMIT) {
+      const message = "이 Topic은 퀴즈를 최대 2번 생성했습니다.";
+      setQuizState((current) => ({ ...current, status: message }));
+      showToast(message);
+      return;
+    }
+
+    setQuizState((current) => ({
+      ...current,
+      isGenerating: true,
+      status: "퀴즈를 생성하는 중입니다."
+    }));
+
+    try {
+      const result = await apiPost(endpoints.quizzes.create(targetTopic.btid), {});
+      const quizzes = normalizeQuizzes(result?.quizzes || []);
+      setQuizState({
+        isLoading: false,
+        isGenerating: false,
+        status: "퀴즈가 생성되었습니다.",
+        quizzes,
+        answers: {},
+        submitted: false
+      });
+      const nextCount = currentCount + 1;
+      const nextCounts = { ...quizGenerationCounts, [generationKey]: nextCount };
+      setQuizGenerationCounts(nextCounts);
+      localStorage.setItem(QUIZ_GENERATION_COUNTS_KEY, JSON.stringify(nextCounts));
+      showToast("퀴즈가 생성되었습니다.");
+    } catch (error) {
+      setQuizState((current) => ({ ...current, isGenerating: false, status: `퀴즈 생성 실패 · ${error.message}` }));
+    }
+  };
+
+  const selectQuizOption = (quizId, optionIndex) => {
+    setQuizState((current) => {
+      if (current.submitted) return current;
+      return {
+        ...current,
+        status: "",
+        answers: { ...current.answers, [String(quizId)]: optionIndex }
+      };
+    });
+  };
+
+  const submitQuizAnswers = () => {
+    setQuizState((current) => {
+      if (!current.quizzes.length) return current;
+      const answeredCount = current.quizzes.filter((quiz) => current.answers[String(quiz.id)] != null).length;
+      if (answeredCount < current.quizzes.length) {
+        return { ...current, status: `아직 ${current.quizzes.length - answeredCount}문제가 남아있습니다.` };
+      }
+      return { ...current, status: "", submitted: true };
+    });
+  };
+
+  const resetQuizAnswers = () => {
+    setQuizState((current) => ({ ...current, status: "", answers: {}, submitted: false }));
+  };
+
+  const openQuizView = (event) => {
+    if (!activeTopic) return;
+
+    if (!isAuthenticated) {
+      event?.preventDefault?.();
+      showToast("로그인해야 이용할 수 있습니다.");
+      return;
+    }
+
+    setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
+    setView("quiz");
+    handleRouteClick(event, `/topics/${activeTopic.id}/quiz`);
+    loadTopicQuizzes(activeTopic);
   };
 
   const loadNodeDetail = async (nodeId) => {
@@ -624,6 +742,13 @@ export default function MainPage() {
   useEffect(() => {
     rememberActiveBrainState();
   }, [authStatus, pageData.activeBrainId, pageData.activeTopicId, pageData.topics, pageData.nodes, view, graph, topicCatalog]);
+
+  // 퀴즈 화면으로 진입하거나 Topic이 바뀌면 해당 BrainTopic의 저장된 퀴즈를 다시 조회합니다.
+  useEffect(() => {
+    if (view === "quiz" && activeTopic) {
+      loadTopicQuizzes(activeTopic);
+    }
+  }, [view, activeTopic?.id, activeTopic?.btid]);
 
   // 관리자/반장 권한이 아니거나 Brain을 벗어나면 관리모드는 자동으로 해제합니다.
   useEffect(() => {
@@ -1342,9 +1467,17 @@ export default function MainPage() {
         onSetGraph={setGraph}
         onSetView={setView}
         nodeDetail={nodeDetail}
+        quizState={quizState}
+        quizGenerationCount={Number(quizGenerationCounts[String(activeTopic?.btid)] || 0)}
+        quizGenerationLimit={QUIZ_GENERATION_LIMIT}
         commentDraft={commentDraft}
         onCloseNodeDetail={closeNodeDetail}
         onToggleNodeRecommend={toggleNodeRecommend}
+        onOpenQuiz={openQuizView}
+        onGenerateQuiz={generateTopicQuizzes}
+        onSelectQuizOption={selectQuizOption}
+        onSubmitQuiz={submitQuizAnswers}
+        onResetQuiz={resetQuizAnswers}
         onUpdateCommentDraft={updateCommentDraft}
         onSubmitComment={submitComment}
         onStartCommentReply={startCommentReply}

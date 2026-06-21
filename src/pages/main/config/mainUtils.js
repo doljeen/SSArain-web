@@ -49,6 +49,21 @@ export const normalizeNodeDetail = (node = {}) => ({
   recommends: node.recommends || node.likeCount || 0
 });
 
+// WAS Quiz DTO(qid, question, explanation, options)를 화면에서 채점하기 쉬운 형태로 정리합니다.
+export const normalizeQuizzes = (quizzes = []) => quizzes.filter(Boolean).map((quiz, quizIndex) => {
+  const quizId = quiz.qid ?? quiz.id ?? quizIndex;
+  return {
+    id: String(quizId),
+    question: quiz.question || "",
+    explanation: quiz.explanation || "",
+    options: (quiz.options || []).filter(Boolean).map((option, optionIndex) => ({
+      id: `${quizId}-${optionIndex}`,
+      text: option.option || option.text || "",
+      isCorrect: toBoolean(option.isCorrect ?? option.correct)
+    }))
+  };
+});
+
 // WAS U01 응답은 { user: { email, name, role }, summary } 구조이고,
 // 로그인 응답은 { email, name } 구조라서 화면에서 쓰는 형태로 맞춥니다.
 export const normalizeUserInfo = (userInfo = {}) => {
