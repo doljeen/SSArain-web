@@ -11,6 +11,7 @@ export default function Sidebar({
   onRoute,
   onSelectBrain,
   onMoveToTopic,
+  onOpenBrainManage,
   onOpenModal,
   onLogout
 }) {
@@ -36,13 +37,24 @@ export default function Sidebar({
           <h2 className="section-heading" id="brains-heading">MY BRAINS</h2>
           <span className={`api-chip ${apiStatus === "was" ? "is-live" : ""}`}>{apiStatus === "was" ? "WAS" : "MOCK"}</span>
         </div>
-        {pageData.brains.map((brain) => (
-          <button key={brain.id} className={`brain-button ${brain.id === pageData.activeBrainId ? "is-active" : ""}`} type="button" data-endpoint={endpoints.brains.topics(brain.id)} onClick={(event) => onSelectBrain(event, brain.id)}>
-            <Icon name="brain" />
-            <span>{brain.name}</span>
-            {brain.id === pageData.activeBrainId && <span className="status-dot" aria-hidden="true" />}
-          </button>
-        ))}
+        {pageData.brains.map((brain) => {
+          const isActive = brain.id === pageData.activeBrainId;
+
+          return (
+            <div key={brain.id} className={`brain-row ${isActive ? "is-active" : ""}`}>
+              <button className={`brain-button ${isActive ? "is-active" : ""}`} type="button" data-endpoint={endpoints.brains.topics(brain.id)} onClick={(event) => onSelectBrain(event, brain.id)}>
+                <Icon name="brain" />
+                <span>{brain.name}</span>
+                {isActive && <span className="status-dot" aria-hidden="true" />}
+              </button>
+              {isActive && (
+                <button className="brain-manage-button" type="button" data-endpoint={endpoints.brains.members(brain.id)} onClick={(event) => onOpenBrainManage(event, brain.id)}>
+                  관리
+                </button>
+              )}
+            </div>
+          );
+        })}
         {/* Brain 생성/찾기 버튼입니다. 찾기는 중앙 검색 화면으로 이동합니다. */}
         <div className="brain-actions">
           <button className="create-brain" type="button" data-endpoint={endpoints.brains.create} onClick={(event) => onRoute(event, "/brains/new")}><Icon name="plus" /><span>생성</span></button>

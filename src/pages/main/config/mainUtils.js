@@ -16,6 +16,8 @@ export const normalizeBrain = (brain) => ({
   id: String(brain.id),
   name: brain.name,
   description: brain.description || "",
+  joinPolicy: brain.joinPolicy || "PROTECTED",
+  role: brain.role || brain.memberRole || brain.brainRole || "",
   owner: brain.adminName || "나",
   members: Array.isArray(brain.memberNames) ? brain.memberNames.length : 1,
   topicsCount: Array.isArray(brain.topics) ? brain.topics.length : 0

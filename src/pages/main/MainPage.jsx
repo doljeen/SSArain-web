@@ -4,6 +4,7 @@ import { endpoints } from "../../api/endpoints.js";
 import { guestPreview } from "../../data/guestPreview.js";
 import { mainMock } from "../../data/mainMock.js";
 import { getCurrentRoute, routeTo, ROUTE_EVENTS, syncDocumentRoute } from "../../shared/router/routes.js";
+import BrainManagerPanel from "./components/BrainManagerPanel.jsx";
 import InsightsPanel from "./components/InsightsPanel.jsx";
 import MainModal from "./components/MainModal.jsx";
 import Sidebar from "./components/Sidebar.jsx";
@@ -20,6 +21,19 @@ const MIN_GRAPH_SCALE = 0.72;
 const MAX_GRAPH_SCALE = 2.2;
 const MAX_GRAPH_PAN_X = 3200;
 const MAX_GRAPH_PAN_Y = 2200;
+
+const emptyBrainManager = {
+  isOpen: false,
+  isLoading: false,
+  isSaving: false,
+  brain: null,
+  form: { name: "", description: "", joinPolicy: "PROTECTED" },
+  members: [],
+  availableUsers: [],
+  joinRequests: [],
+  searchKeyword: "",
+  message: ""
+};
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -57,6 +71,13 @@ const isBrainSearchRoute = (path) => path === "/brains/search";
 const getViewFromRoute = (path) => path.includes("/quiz") ? "quiz" : path.includes("/posts") || path.startsWith("/nodes/") ? "posts" : "synapse";
 const canUseManageMode = (role) => ["ADMIN", "MANAGER", "LEADER"].includes(String(role || "").toUpperCase());
 const isTopicUsing = (value) => value === true || value === "true" || value === 1 || value === "1";
+const normalizeBrainUser = (user = {}) => ({
+  id: String(user.UUID || user.uuid || user.uid || user.id || ""),
+  name: user.name || "사용자",
+  email: user.email || ""
+});
+
+const normalizeBrainUserPage = (page = {}) => (page.users || []).map(normalizeBrainUser).filter((user) => user.id);
 const rootScatterPositions = [
   { x: -620, y: -270 },
   { x: 650, y: 260 },
@@ -248,6 +269,7 @@ export default function MainPage() {
   const [topicPanelMode, setTopicPanelMode] = useState(null);
   const [topicCatalog, setTopicCatalog] = useState([]);
   const [openBrainTabs, setOpenBrainTabs] = useState([]);
+  const [brainManager, setBrainManager] = useState(emptyBrainManager);
   const [brainSearch, setBrainSearch] = useState({
     query: "",
     results: [],
@@ -1392,9 +1414,145 @@ export default function MainPage() {
     showToast(`${topic.name} Topic 삭제 UI 반영 · WAS 삭제 API 연결 대기`);
   };
 
-  // WAS에 Brain 가입 API가 아직 없으므로 버튼 클릭 시 현재 가능한 상태만 안내합니다.
-  const requestJoinBrain = (brain) => {
-    showToast(`${brain.name} 가입 API가 아직 준비되지 않았습니다.`);
+  const loadBrainManagerData = async (brainId, keyword = "") => {
+    setBrainManager((current) => ({ ...current, isLoading: true, message: "" }));
+
+    const [membersResult, availableResult, requestsResult] = await Promise.allSettled([
+      apiGet(endpoints.brains.members(brainId, 0, 50)),
+      apiGet(endpoints.brains.availableUsers(brainId, keyword, 0, 20)),
+      apiGet(endpoints.brains.joinRequests(brainId, 0, 50))
+    ]);
+
+    const failed = [membersResult, availableResult, requestsResult]
+      .filter((result) => result.status === "rejected")
+      .map((result) => result.reason?.message)
+      .filter(Boolean);
+
+    setBrainManager((current) => ({
+      ...current,
+      isLoading: false,
+      members: membersResult.status === "fulfilled" ? normalizeBrainUserPage(membersResult.value) : current.members,
+      availableUsers: availableResult.status === "fulfilled" ? normalizeBrainUserPage(availableResult.value) : current.availableUsers,
+      joinRequests: requestsResult.status === "fulfilled" ? normalizeBrainUserPage(requestsResult.value) : current.joinRequests,
+      message: failed.length ? `일부 정보를 불러오지 못했습니다 · ${failed[0]}` : ""
+    }));
+  };
+
+  const openBrainManager = async (event, brainId) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    const brain = pageData.brains.find((item) => String(item.id) === String(brainId)) || activeBrain;
+    if (!brain) return;
+
+    setBrainManager({
+      ...emptyBrainManager,
+      isOpen: true,
+      isLoading: true,
+      brain,
+      form: {
+        name: brain.name || "",
+        description: brain.description || "",
+        joinPolicy: brain.joinPolicy || "PROTECTED"
+      }
+    });
+
+    await loadBrainManagerData(brain.id, "");
+  };
+
+  const closeBrainManager = () => setBrainManager(emptyBrainManager);
+
+  const updateBrainManagerForm = (event) => {
+    const { name, value, checked, type } = event.target;
+
+    if (name === "joinPolicy") {
+      setBrainManager((current) => ({
+        ...current,
+        form: { ...current.form, joinPolicy: checked ? "PROTECTED" : "PUBLIC" },
+        message: ""
+      }));
+      return;
+    }
+
+    if (name === "searchKeyword") {
+      setBrainManager((current) => ({ ...current, searchKeyword: value, message: "" }));
+      return;
+    }
+
+    setBrainManager((current) => ({
+      ...current,
+      form: { ...current.form, [name]: type === "checkbox" ? checked : value },
+      message: ""
+    }));
+  };
+
+  const saveBrainInfo = async () => {
+    setBrainManager((current) => ({
+      ...current,
+      isSaving: false,
+      message: "현재 WAS에는 Brain 정보 수정 API가 아직 없습니다. PATCH /brains/{bid}가 추가되면 바로 저장 연결이 가능합니다."
+    }));
+  };
+
+  const searchAvailableUsers = async (event) => {
+    event.preventDefault();
+    if (!brainManager.brain) return;
+    await loadBrainManagerData(brainManager.brain.id, brainManager.searchKeyword);
+  };
+
+  const inviteBrainUser = async (user) => {
+    if (!brainManager.brain) return;
+
+    try {
+      await apiPost(endpoints.brains.addUsers(brainManager.brain.id), { users: [user.id] });
+      showToast(`${user.name} 멤버 추가 완료`);
+      await loadBrainManagerData(brainManager.brain.id, brainManager.searchKeyword);
+    } catch (error) {
+      setBrainManager((current) => ({ ...current, message: `멤버 추가 실패 · ${error.message}` }));
+    }
+  };
+
+  const removeBrainMember = async (member) => {
+    if (!brainManager.brain) return;
+
+    try {
+      await apiDelete(endpoints.brains.removeUsers(brainManager.brain.id), { users: [member.id] });
+      showToast(`${member.name} 멤버 삭제 완료`);
+      await loadBrainManagerData(brainManager.brain.id, brainManager.searchKeyword);
+    } catch (error) {
+      setBrainManager((current) => ({ ...current, message: `멤버 삭제 실패 · ${error.message}` }));
+    }
+  };
+
+  const manageJoinRequest = async (request, isAccept) => {
+    if (!brainManager.brain) return;
+
+    try {
+      await apiPost(endpoints.brains.manageJoin(brainManager.brain.id), {
+        isAccept,
+        user: request.id
+      });
+      showToast(`${request.name} 가입 요청 ${isAccept ? "수락" : "거부"} 완료`);
+      await loadBrainManagerData(brainManager.brain.id, brainManager.searchKeyword);
+    } catch (error) {
+      setBrainManager((current) => ({ ...current, message: `가입 요청 처리 실패 · ${error.message}` }));
+    }
+  };
+
+  // Brain 검색 화면에서 가입 버튼을 누르면 PUBLIC은 즉시 가입, PROTECTED는 가입 대기 상태가 됩니다.
+  const requestJoinBrain = async (brain) => {
+    if (!isAuthenticated) {
+      showToast("로그인해야 Brain에 가입할 수 있습니다.");
+      return;
+    }
+
+    try {
+      await apiPost(endpoints.brains.join(brain.id), {});
+      showToast(`${brain.name} 가입 요청을 보냈습니다.`);
+      await loadMainData();
+    } catch (error) {
+      showToast(`가입 요청 실패 · ${error.message}`);
+    }
   };
 
   // WAS 로그아웃 후 게스트 메인 화면으로 전환합니다.
@@ -1426,6 +1584,7 @@ export default function MainPage() {
         isAuthenticated={isAuthenticated}
         pageData={pageData}
         onMoveToTopic={moveToTopic}
+        onOpenBrainManage={openBrainManager}
         onOpenModal={setModal}
         onLogout={logout}
         onRoute={handleRouteClick}
@@ -1537,6 +1696,18 @@ export default function MainPage() {
           onCreateTopic={createTopicFromPanel}
           onDeleteTopic={deleteTopicFromPanel}
           onToggleTopicUse={toggleTopicUse}
+        />
+      )}
+      {brainManager.isOpen && (
+        <BrainManagerPanel
+          manager={brainManager}
+          onClose={closeBrainManager}
+          onChangeForm={updateBrainManagerForm}
+          onSaveBrain={saveBrainInfo}
+          onSearchAvailableUsers={searchAvailableUsers}
+          onInviteUser={inviteBrainUser}
+          onRemoveMember={removeBrainMember}
+          onManageJoinRequest={manageJoinRequest}
         />
       )}
     </main>
