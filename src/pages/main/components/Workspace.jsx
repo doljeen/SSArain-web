@@ -13,15 +13,15 @@ const lineStyle = (fromX, fromY, toX, toY) => {
 };
 
 const rootScatterPositions = [
-  { x: -620, y: -270 },
-  { x: 650, y: 260 },
+  { x: -900, y: -360 },
+  { x: 920, y: 360 },
   { x: 0, y: 0 },
-  { x: -300, y: 390 },
-  { x: 410, y: -385 },
-  { x: -820, y: 150 },
-  { x: 850, y: -155 },
-  { x: -910, y: -420 },
-  { x: 930, y: 440 }
+  { x: -480, y: 560 },
+  { x: 560, y: -560 },
+  { x: -1180, y: 180 },
+  { x: 1220, y: -180 },
+  { x: -1280, y: -620 },
+  { x: 1320, y: 640 }
 ];
 
 const findTopicPath = (topics, topicId, path = []) => {
@@ -60,10 +60,10 @@ const collectTopicMap = (rootTopics, activeTopicId) => {
       const side = branchSide || (index % 2 === 0 ? 1 : -1);
       const sameSideIndex = children.slice(0, index).filter((_, childIndex) => (branchSide || (childIndex % 2 === 0 ? 1 : -1)) === side).length;
       const sameSideTotal = children.filter((_, childIndex) => (branchSide || (childIndex % 2 === 0 ? 1 : -1)) === side).length;
-      const yOffset = (sameSideIndex - ((sameSideTotal - 1) / 2)) * (depth === 1 ? 170 : 130);
+      const yOffset = (sameSideIndex - ((sameSideTotal - 1) / 2)) * (depth === 1 ? 250 : 190);
       const node = {
         topic: child,
-        x: parentNode.x + (side * (depth === 1 ? 300 : 220)),
+        x: parentNode.x + (side * (depth === 1 ? 430 : 330)),
         y: parentNode.y + yOffset,
         depth,
         side,
@@ -84,25 +84,60 @@ const collectTopicMap = (rootTopics, activeTopicId) => {
   return { rootNodes, descendantNodes, links, selectedTopic };
 };
 
-const TopicTreeGraph = ({ rootTopics, activeTopic, onMoveToTopic }) => {
+const TopicTreeGraph = ({ rootTopics, activeTopic, topicNodesById = {}, graphScale = 1, onMoveToTopic, onOpenNodeDetail }) => {
   const { rootNodes, descendantNodes, links, selectedTopic } = collectTopicMap(rootTopics, activeTopic?.id);
+  const allTopicNodes = [...rootNodes, ...descendantNodes];
+  const shouldShowNeuronDetail = Number(graphScale || 1) >= 1.15;
+  const positionedNeurons = allTopicNodes.flatMap((topicNode) => {
+    const topicNeurons = topicNodesById[String(topicNode.topic.id)] || [];
+    const neuronCount = topicNeurons.length;
+    const neuronRadius = neuronCount > 12 ? 176 : neuronCount > 6 ? 158 : 138;
+
+    return topicNeurons.map((node, index) => {
+      const angle = ((Math.PI * 2) / Math.max(neuronCount, 1)) * index - (Math.PI / 2);
+      const ringOffset = neuronCount > 10 && index % 2 ? 34 : 0;
+      return {
+        node,
+        topicNode,
+        x: topicNode.x + (Math.cos(angle) * (neuronRadius + ringOffset)),
+        y: topicNode.y + (Math.sin(angle) * (neuronRadius + ringOffset))
+      };
+    });
+  });
 
   if (!rootTopics.length) return null;
 
   return (
-    <div className="topic-map" aria-label="Topic synapse map">
+    <div className={`topic-map ${shouldShowNeuronDetail ? "is-detail-zoom" : ""}`} aria-label="Topic synapse map">
       {links.map((link) => (
         <span className="topic-map-link" key={`${link.from.topic.id}-${link.to.topic.id}`} style={lineStyle(link.from.x, link.from.y, link.to.x, link.to.y)} aria-hidden="true" />
       ))}
 
+      {positionedNeurons.map((item) => (
+        <span className="neuron-map-link is-main" key={`neuron-link-${item.topicNode.topic.id}-${item.node.id}`} style={lineStyle(item.topicNode.x, item.topicNode.y, item.x, item.y)} aria-hidden="true" />
+      ))}
+
+      {positionedNeurons.map((item) => (
+        <button
+          className="neuron-map-node is-main"
+          key={`${item.topicNode.topic.id}-${item.node.id}`}
+          type="button"
+          style={{ "--node-x": `${item.x}px`, "--node-y": `${item.y}px` }}
+          onClick={(event) => onOpenNodeDetail(event, item.node.id)}
+        >
+          <span className="neuron-map-icon"><Icon name="file" /></span>
+          <strong>{item.node.title || "제목 없는 Neuron"}</strong>
+        </button>
+      ))}
+
       {rootNodes.map((node) => (
-        <button className={`topic-map-node is-root ${node.isActive ? "is-active" : ""}`} key={node.topic.id} type="button" style={{ "--node-x": `${node.x}px`, "--node-y": `${node.y}px` }} onClick={(event) => onMoveToTopic(event, node.topic.id, { openPosts: true })}>
+        <button className={`topic-map-node is-root ${node.isActive ? "is-active" : ""}`} key={node.topic.id} type="button" style={{ "--node-x": `${node.x}px`, "--node-y": `${node.y}px` }} onClick={(event) => onMoveToTopic(event, node.topic.id)}>
           <span>{node.topic.name}</span>
         </button>
       ))}
 
       {descendantNodes.map((node) => (
-        <button className={`topic-map-node ${node.depth > 1 ? "is-small" : ""} ${node.isPath ? "is-path" : ""} ${node.isSelected ? "is-selected" : ""}`} key={node.topic.id} type="button" style={{ "--node-x": `${node.x}px`, "--node-y": `${node.y}px` }} onClick={(event) => onMoveToTopic(event, node.topic.id, { openPosts: true })}>
+        <button className={`topic-map-node ${node.depth > 1 ? "is-small" : ""} ${node.isPath ? "is-path" : ""} ${node.isSelected ? "is-selected" : ""}`} key={node.topic.id} type="button" style={{ "--node-x": `${node.x}px`, "--node-y": `${node.y}px` }} onClick={(event) => onMoveToTopic(event, node.topic.id)}>
           <span>{node.topic.name}</span>
         </button>
       ))}
@@ -175,6 +210,7 @@ export default function Workspace({
   onFocusPoint,
   onSetGraph,
   onSetView,
+  onFitGraph,
   onZoom,
   onOpenModal,
   onOpenNodeModal,
@@ -388,7 +424,7 @@ export default function Workspace({
           <>
             {/* CSS 변수로 pan/zoom/tilt 값을 내려서 Prezi식 이동을 표현합니다. */}
             <div className="graph-viewport" style={{ "--pan-x": `${graph.x}px`, "--pan-y": `${graph.y}px`, "--zoom": graph.scale, "--tilt": `${graph.tilt || 0}deg` }}>
-              <TopicTreeGraph rootTopics={visibleRootTopics} activeTopic={activeTopic} onMoveToTopic={onMoveToTopic} />
+              <TopicTreeGraph rootTopics={visibleRootTopics} activeTopic={activeTopic} topicNodesById={pageData.topicNodesById || {}} graphScale={graph.scale} onMoveToTopic={onMoveToTopic} onOpenNodeDetail={onOpenNodeDetail} />
             </div>
             {canGenerateQuiz && (
               <div className="quiz-manage-panel" aria-live="polite">
@@ -411,7 +447,7 @@ export default function Workspace({
             {/* 그래프 확대/축소와 위치 초기화 컨트롤입니다. */}
             <div className="zoom-controls" aria-label="그래프 확대 축소">
               <button type="button" onClick={() => onZoom(graph.scale / 1.15, window.innerWidth / 2, window.innerHeight / 2)} aria-label="축소">-</button>
-              <button type="button" onClick={() => onSetGraph({ x: 0, y: 0, scale: 1, tilt: 0 })} aria-label="위치 초기화">{Math.round(graph.scale * 100)}%</button>
+              <button type="button" onClick={onFitGraph} aria-label="전체 Topic 보기">{Math.round(graph.scale * 100)}%</button>
               <button type="button" onClick={() => onZoom(graph.scale * 1.15, window.innerWidth / 2, window.innerHeight / 2)} aria-label="확대">+</button>
             </div>
           </>

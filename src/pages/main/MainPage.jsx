@@ -20,7 +20,7 @@ const SIDEBAR_WIDTH_KEY = "ssarain-sidebar-width";
 const QUIZ_GENERATION_LIMIT = 2;
 const MIN_SIDEBAR_WIDTH = 292;
 const MAX_SIDEBAR_WIDTH = 520;
-const MIN_GRAPH_SCALE = 0.72;
+const MIN_GRAPH_SCALE = 0.18;
 const MAX_GRAPH_SCALE = 2.2;
 const MAX_GRAPH_PAN_X = 3200;
 const MAX_GRAPH_PAN_Y = 2200;
@@ -82,15 +82,15 @@ const normalizeBrainUser = (user = {}) => ({
 
 const normalizeBrainUserPage = (page = {}) => (page.users || []).map(normalizeBrainUser).filter((user) => user.id);
 const rootScatterPositions = [
-  { x: -620, y: -270 },
-  { x: 650, y: 260 },
+  { x: -900, y: -360 },
+  { x: 920, y: 360 },
   { x: 0, y: 0 },
-  { x: -300, y: 390 },
-  { x: 410, y: -385 },
-  { x: -820, y: 150 },
-  { x: 850, y: -155 },
-  { x: -910, y: -420 },
-  { x: 930, y: 440 }
+  { x: -480, y: 560 },
+  { x: 560, y: -560 },
+  { x: -1180, y: 180 },
+  { x: 1220, y: -180 },
+  { x: -1280, y: -620 },
+  { x: 1320, y: 640 }
 ];
 
 const collectTopicLayoutPoints = (rootTopics) => {
@@ -114,10 +114,10 @@ const collectTopicLayoutPoints = (rootTopics) => {
       const side = branchSide || (index % 2 === 0 ? 1 : -1);
       const sameSideIndex = children.slice(0, index).filter((_, childIndex) => (branchSide || (childIndex % 2 === 0 ? 1 : -1)) === side).length;
       const sameSideTotal = children.filter((_, childIndex) => (branchSide || (childIndex % 2 === 0 ? 1 : -1)) === side).length;
-      const yOffset = (sameSideIndex - ((sameSideTotal - 1) / 2)) * (depth === 1 ? 170 : 130);
+      const yOffset = (sameSideIndex - ((sameSideTotal - 1) / 2)) * (depth === 1 ? 250 : 190);
       const node = {
         topic: child,
-        x: parentNode.x + (side * (depth === 1 ? 300 : 220)),
+        x: parentNode.x + (side * (depth === 1 ? 430 : 330)),
         y: parentNode.y + yOffset
       };
 
@@ -339,6 +339,7 @@ export default function MainPage() {
       graph,
       topics: clone(pageData.topics),
       nodes: clone(pageData.nodes),
+      topicNodesById: clone(pageData.topicNodesById || {}),
       topicCatalog: clone(topicCatalog)
     };
   };
@@ -351,7 +352,8 @@ export default function MainPage() {
       activeBrainId: String(brainId),
       activeTopicId: cachedState.activeTopicId || null,
       topics: clone(cachedState.topics || []),
-      nodes: clone(cachedState.nodes || [])
+      nodes: clone(cachedState.nodes || []),
+      topicNodesById: clone(cachedState.topicNodesById || {})
     }));
     setTopicCatalog(clone(cachedState.topicCatalog || []));
     setGraph(clampGraph(cachedState.graph || { x: 0, y: 0, scale: 1, tilt: 0 }));
@@ -371,7 +373,8 @@ export default function MainPage() {
         : visibleFlat.some((topic) => String(topic.id) === String(current.activeTopicId))
         ? current.activeTopicId
         : (visibleFlat[0] ? String(visibleFlat[0].id) : null),
-      nodes: visibleFlat.length ? current.nodes : []
+      nodes: visibleFlat.length ? current.nodes : [],
+      topicNodesById: visibleFlat.length ? current.topicNodesById || {} : {}
     }));
   };
 
@@ -417,6 +420,27 @@ export default function MainPage() {
     } catch (error) {
       return [];
     }
+  };
+
+  // Synapse 화면에서는 모든 Topic 주변에 Neuron 미리보기를 작게 배치합니다.
+  const fetchTopicNodePreviews = async (brainId, topic) => {
+    if (!brainId || !topic?.btid) return [];
+
+    try {
+      const result = await apiGet(endpoints.nodes.preview(topic.btid));
+      return normalizeNodes(result?.neuronPreviewList || []);
+    } catch (error) {
+      return [];
+    }
+  };
+
+  const fetchVisibleTopicNodePreviews = async (brainId, topics = []) => {
+    const flatTopics = flattenTopics(topics).filter((topic) => topic?.btid);
+    const entries = await Promise.all(flatTopics.map(async (topic) => [
+      String(topic.id),
+      await fetchTopicNodePreviews(brainId, topic)
+    ]));
+    return Object.fromEntries(entries);
   };
 
   // 현재 BrainTopic에 저장된 퀴즈를 WAS에서 조회합니다.
@@ -548,7 +572,17 @@ export default function MainPage() {
           String(node.id) === String(nodeId)
             ? { ...node, comments: normalizedDetail.comments.length }
             : node
-        ))
+        )),
+        topicNodesById: Object.fromEntries(
+          Object.entries(current.topicNodesById || {}).map(([topicId, nodes]) => [
+            topicId,
+            nodes.map((node) => (
+              String(node.id) === String(nodeId)
+                ? { ...node, comments: normalizedDetail.comments.length }
+                : node
+            ))
+          ])
+        )
       }));
       setCommentDraft({ content: "", status: "", isSubmitting: false, parentId: null, editingId: null });
     } catch (error) {
@@ -574,6 +608,8 @@ export default function MainPage() {
       const preferredTopicId = requestedTopicId || cachedState?.activeTopicId || null;
       const selectedTopic = flatTopics.find((topic) => String(topic.id) === String(preferredTopicId)) || flatTopics[0] || null;
       const nodes = selectedTopic ? await fetchTopicNodes(brainId, selectedTopic) : [];
+      const topicNodesById = await fetchVisibleTopicNodePreviews(brainId, visibleTopics);
+      if (selectedTopic) topicNodesById[String(selectedTopic.id)] = nodes;
       const normalizedBrain = normalizeBrain({ ...detail, topics: detail?.topics || [] });
       const nextView = options.view || cachedState?.view || view;
 
@@ -583,7 +619,8 @@ export default function MainPage() {
         activeTopicId: selectedTopic ? String(selectedTopic.id) : null,
         brains: current.brains.map((brain) => String(brain.id) === String(normalizedBrain.id) ? normalizedBrain : brain),
         topics: visibleTopics,
-        nodes
+        nodes,
+        topicNodesById
       }));
       setView(nextView);
       setApiStatus("was");
@@ -602,6 +639,7 @@ export default function MainPage() {
       setPageData((current) => ({
         ...current,
         ...guestPreview,
+        topicNodesById: {},
         user: { name: "Guest", email: "", role: "GUEST" }
       }));
       return;
@@ -619,6 +657,7 @@ export default function MainPage() {
       let topics = [];
       let catalogTopics = [];
       let nodes = [];
+      let topicNodesById = {};
       let activeTopicId = null;
       let nextBrains = brains;
 
@@ -632,6 +671,8 @@ export default function MainPage() {
       const selectedTopic = flatTopics.find((topic) => String(topic.id) === String(routedTopicId)) || flatTopics[0] || null;
       activeTopicId = selectedTopic ? String(selectedTopic.id) : null;
       nodes = selectedTopic ? await fetchTopicNodes(selectedBrain.id, selectedTopic) : [];
+      topicNodesById = await fetchVisibleTopicNodePreviews(selectedBrain.id, visibleTopics);
+      if (selectedTopic) topicNodesById[String(selectedTopic.id)] = nodes;
       topics = visibleTopics;
       if (routedNodeId) loadNodeDetail(routedNodeId);
 
@@ -651,7 +692,8 @@ export default function MainPage() {
         activeTopicId,
         brains: nextBrains,
         topics,
-        nodes
+        nodes,
+        topicNodesById
       }));
     } catch (error) {
       sessionStorage.removeItem(AUTH_STATE_KEY);
@@ -660,6 +702,7 @@ export default function MainPage() {
       setPageData((current) => ({
         ...current,
         ...guestPreview,
+        topicNodesById: {},
         user: { name: "Guest", email: "", role: "GUEST" }
       }));
     }
@@ -750,7 +793,7 @@ export default function MainPage() {
 
   useEffect(() => {
     rememberActiveBrainState();
-  }, [authStatus, pageData.activeBrainId, pageData.activeTopicId, pageData.topics, pageData.nodes, view, graph, topicCatalog]);
+  }, [authStatus, pageData.activeBrainId, pageData.activeTopicId, pageData.topics, pageData.nodes, pageData.topicNodesById, view, graph, topicCatalog]);
 
   // 퀴즈 화면으로 진입하거나 Topic이 바뀌면 해당 BrainTopic의 저장된 퀴즈를 다시 조회합니다.
   useEffect(() => {
@@ -797,6 +840,34 @@ export default function MainPage() {
   // 실제 Topic Tree 렌더링과 같은 좌표계를 사용해 클릭/사이드바 이동 위치를 계산합니다.
   const topicLayoutPoints = useMemo(() => collectTopicLayoutPoints(pageData.topics), [pageData.topics]);
 
+  const fitGraphToTopics = () => {
+    const field = graphFieldRef.current;
+    if (!field || !topicLayoutPoints.length) {
+      setGraph(clampGraph({ x: 0, y: 0, scale: MIN_GRAPH_SCALE, tilt: 0 }));
+      return;
+    }
+
+    const rect = field.getBoundingClientRect();
+    const paddingX = 360;
+    const paddingY = 260;
+    const minX = Math.min(...topicLayoutPoints.map((point) => point.x)) - paddingX;
+    const maxX = Math.max(...topicLayoutPoints.map((point) => point.x)) + paddingX;
+    const minY = Math.min(...topicLayoutPoints.map((point) => point.y)) - paddingY;
+    const maxY = Math.max(...topicLayoutPoints.map((point) => point.y)) + paddingY;
+    const widthScale = rect.width / Math.max(maxX - minX, 1);
+    const heightScale = rect.height / Math.max(maxY - minY, 1);
+    const nextScale = clamp(Math.min(widthScale, heightScale, 1), MIN_GRAPH_SCALE, MAX_GRAPH_SCALE);
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    setGraph(clampGraph({
+      x: -centerX * nextScale,
+      y: -centerY * nextScale,
+      scale: nextScale,
+      tilt: 0
+    }));
+  };
+
   // 현재 Topic/User 정보에 따라 모달 문구와 연결 엔드포인트를 생성합니다.
   const modalCopy = useMemo(() => createModalCopy({
     activeTopic,
@@ -838,7 +909,7 @@ export default function MainPage() {
       const travelX = targetX - current.x;
       const tilt = Math.max(-1.8, Math.min(1.8, travelX / 420));
       return clampGraph({
-        scale: Math.max(0.72, Math.min(current.scale, 1) * 0.88),
+        scale: Math.max(MIN_GRAPH_SCALE, Math.min(current.scale, 1) * 0.88),
         x: current.x + ((targetX - current.x) * 0.18),
         y: current.y + ((targetY - current.y) * 0.18),
         tilt
@@ -937,9 +1008,17 @@ export default function MainPage() {
         btid: Number(targetBtid)
       });
       const nextNode = normalizeNodes([created])[0];
+      const targetTopic = flattenTopics(pageData.topics).find((topic) => String(topic.btid) === String(targetBtid));
+      const targetTopicId = targetTopic ? String(targetTopic.id) : String(activeTopic?.id || "");
       setPageData((current) => ({
         ...current,
-        nodes: [nextNode, ...current.nodes]
+        nodes: [nextNode, ...current.nodes],
+        topicNodesById: targetTopicId
+          ? {
+            ...(current.topicNodesById || {}),
+            [targetTopicId]: [nextNode, ...(current.topicNodesById?.[targetTopicId] || [])]
+          }
+          : current.topicNodesById || {}
       }));
       setNodeDetail({ isOpen: true, isLoading: false, data: normalizeNodeDetail(created), status: "", liked: false });
       closeNodeCreateModal();
@@ -1010,7 +1089,8 @@ export default function MainPage() {
         activeBrainId: String(brainId),
         activeTopicId: null,
         topics: [],
-        nodes: []
+        nodes: [],
+        topicNodesById: {}
       }));
       setView("synapse");
       setGraph(clampGraph({ x: 0, y: 0, scale: 1, tilt: 0 }));
@@ -1044,7 +1124,8 @@ export default function MainPage() {
             activeBrainId: null,
             activeTopicId: null,
             topics: [],
-            nodes: []
+            nodes: [],
+            topicNodesById: {}
           }));
           setView("synapse");
           routeTo("/main");
@@ -1069,11 +1150,22 @@ export default function MainPage() {
     if (shouldOpenPosts) {
       setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
       setView("posts");
-      setPageData((current) => ({ ...current, activeTopicId: String(topicId), nodes: [] }));
+      setPageData((current) => ({
+        ...current,
+        activeTopicId: String(topicId),
+        nodes: current.topicNodesById?.[String(topicId)] || []
+      }));
       if (shouldUpdateRoute) handleRouteClick(event, `/topics/${topicId}/posts`);
       if (activeBrain) {
         fetchTopicNodes(activeBrain.id, selectedTopic).then((nodes) => {
-          setPageData((current) => String(current.activeTopicId) === String(topicId) ? { ...current, nodes } : current);
+          setPageData((current) => String(current.activeTopicId) === String(topicId) ? {
+            ...current,
+            nodes,
+            topicNodesById: { ...(current.topicNodesById || {}), [String(topicId)]: nodes }
+          } : {
+            ...current,
+            topicNodesById: { ...(current.topicNodesById || {}), [String(topicId)]: nodes }
+          });
         });
       }
       return;
@@ -1082,13 +1174,26 @@ export default function MainPage() {
     const targetPoint = topicLayoutPoints.find((point) => String(point.topic.id) === String(topicId));
     if (targetPoint) focusGraphPoint(targetPoint.x, targetPoint.y, 1.35);
 
-    setPageData((current) => ({ ...current, activeTopicId: topicId }));
+    setView("synapse");
+    setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
+    setPageData((current) => ({
+      ...current,
+      activeTopicId: topicId,
+      nodes: current.topicNodesById?.[String(topicId)] || []
+    }));
     if (activeBrain) {
       fetchTopicNodes(activeBrain.id, selectedTopic).then((nodes) => {
-        setPageData((current) => String(current.activeTopicId) === String(topicId) ? { ...current, nodes } : current);
+        setPageData((current) => String(current.activeTopicId) === String(topicId) ? {
+          ...current,
+          nodes,
+          topicNodesById: { ...(current.topicNodesById || {}), [String(topicId)]: nodes }
+        } : {
+          ...current,
+          topicNodesById: { ...(current.topicNodesById || {}), [String(topicId)]: nodes }
+        });
       });
     }
-    if (shouldUpdateRoute) handleRouteClick(event, shouldOpenPosts ? `/topics/${topicId}/posts` : `/topics/${topicId}`);
+    if (shouldUpdateRoute) handleRouteClick(event, `/topics/${topicId}/synapse`);
   };
 
   const openNodeDetail = (event, nodeId) => {
@@ -1120,7 +1225,13 @@ export default function MainPage() {
       const nextRoute = activeTopic ? `/topics/${activeTopic.id}/posts` : "/main/posts";
       setPageData((current) => ({
         ...current,
-        nodes: current.nodes.filter((node) => String(node.id) !== String(nodeId))
+        nodes: current.nodes.filter((node) => String(node.id) !== String(nodeId)),
+        topicNodesById: Object.fromEntries(
+          Object.entries(current.topicNodesById || {}).map(([topicId, nodes]) => [
+            topicId,
+            nodes.filter((node) => String(node.id) !== String(nodeId))
+          ])
+        )
       }));
       setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
       setCommentDraft({ content: "", status: "", isSubmitting: false, parentId: null, editingId: null });
@@ -1164,7 +1275,17 @@ export default function MainPage() {
         String(node.id) === String(nodeId)
           ? { ...node, comments: count }
           : node
-      ))
+      )),
+      topicNodesById: Object.fromEntries(
+        Object.entries(current.topicNodesById || {}).map(([topicId, nodes]) => [
+          topicId,
+          nodes.map((node) => (
+            String(node.id) === String(nodeId)
+              ? { ...node, comments: count }
+              : node
+          ))
+        ])
+      )
     }));
   };
 
@@ -1669,6 +1790,7 @@ export default function MainPage() {
         onRoute={handleRouteClick}
         onSetGraph={setGraph}
         onSetView={setView}
+        onFitGraph={fitGraphToTopics}
         nodeDetail={nodeDetail}
         quizState={quizState}
         quizGenerationCount={Number(quizGenerationCounts[String(activeTopic?.btid)] || 0)}

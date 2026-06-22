@@ -778,9 +778,9 @@ button {
   position: absolute;
   left: 50%;
   top: 52%;
-  width: min(1760px, calc(100vw - 500px));
-  min-width: 1320px;
-  height: 760px;
+  width: min(2400px, calc(100vw - 500px));
+  min-width: 1900px;
+  height: 1120px;
   transform: translate(-50%, -50%);
 }
 
@@ -788,9 +788,11 @@ button {
   position: absolute;
   left: 50%;
   top: 50%;
-  min-width: 112px;
-  min-height: 72px;
-  padding: 0 18px;
+  width: 158px;
+  height: 78px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 14px;
   display: grid;
   place-items: center;
   border: 2px solid #dfe7f2;
@@ -803,18 +805,29 @@ button {
   line-height: 1.15;
   box-shadow: 0 12px 28px rgba(37, 50, 70, 0.1);
   transform: translate(calc(var(--node-x) - 50%), calc(var(--node-y) - 50%));
-  z-index: 2;
+  overflow: hidden;
+  z-index: 12;
+}
+
+.topic-map-node span {
+  max-width: 100%;
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .topic-map-node.is-root {
-  width: 140px;
-  height: 140px;
+  width: 150px;
+  height: 150px;
   border-color: #e6edf8;
+  border-radius: 50%;
   background: #11172b;
   color: #ffffff;
   font-size: 15px;
   box-shadow: 0 20px 42px rgba(17, 23, 43, 0.24);
-  z-index: 3;
+  z-index: 14;
 }
 
 .topic-map-node.is-root.is-active {
@@ -834,8 +847,8 @@ button {
 }
 
 .topic-map-node.is-small {
-  min-width: 104px;
-  min-height: 64px;
+  width: 150px;
+  height: 66px;
   font-size: 12px;
 }
 
@@ -864,6 +877,178 @@ button {
   font-weight: 800;
   transform: translate(-50%, 150px);
   box-shadow: 0 10px 24px rgba(37, 50, 70, 0.08);
+}
+
+.neuron-map-link {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--line-length);
+  height: 2px;
+  background: repeating-linear-gradient(90deg, #cbdafe 0 7px, transparent 7px 13px);
+  transform: translate(var(--from-x), var(--from-y)) rotate(var(--line-angle));
+  transform-origin: left center;
+  z-index: 1;
+  opacity: 0.9;
+}
+
+.neuron-map-link.is-main {
+  height: 1px;
+  background: repeating-linear-gradient(90deg, rgba(109, 93, 252, 0.26) 0 6px, transparent 6px 12px);
+  opacity: 0.65;
+}
+
+.neuron-map-node {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 168px;
+  min-height: 88px;
+  padding: 14px 16px;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  border: 2px solid #d9e4ff;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #253246;
+  text-align: center;
+  box-shadow: 0 16px 34px rgba(37, 50, 70, 0.12);
+  transform: translate(calc(var(--node-x) - 50%), calc(var(--node-y) - 50%));
+  z-index: 4;
+}
+
+.neuron-map-node:hover {
+  border-color: var(--color-purple-strong);
+  box-shadow: 0 22px 42px rgba(101, 87, 255, 0.2);
+  z-index: 80;
+}
+
+.neuron-map-node.is-main {
+  width: 38px;
+  min-height: 38px;
+  padding: 0;
+  place-items: center;
+  gap: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.98);
+  transform: translate(calc(var(--node-x) - 50%), calc(var(--node-y) - 50%));
+  transition:
+    width 180ms ease,
+    min-height 180ms ease,
+    padding 180ms ease,
+    border-radius 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+  z-index: 6;
+}
+
+.topic-map.is-detail-zoom .neuron-map-node.is-main {
+  width: 136px;
+  min-height: 58px;
+  padding: 9px 12px;
+  place-items: start center;
+  gap: 4px;
+  border-radius: 16px;
+}
+
+.neuron-map-node.is-main:hover {
+  transform: translate(calc(var(--node-x) - 50%), calc(var(--node-y) - 50%)) scale(1.04);
+  z-index: 80;
+}
+
+.neuron-map-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #eef2ff;
+  color: var(--color-purple-strong);
+}
+
+.neuron-map-icon .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.neuron-map-node strong {
+  max-width: 100%;
+  color: #253246;
+  font-size: 13px;
+  font-weight: 920;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.neuron-map-node.is-main strong {
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.topic-map.is-detail-zoom .neuron-map-node.is-main strong {
+  width: 100%;
+  height: auto;
+  opacity: 1;
+}
+
+.neuron-map-node small {
+  max-width: 100%;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.neuron-map-node.is-main small {
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.topic-neuron-empty {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 220px;
+  min-height: 96px;
+  padding: 18px;
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  border: 1px dashed #cbdafe;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #64748b;
+  text-align: center;
+  transform: translate(calc(var(--node-x) - 50%), calc(var(--node-y) + 150px));
+  z-index: 5;
+}
+
+.topic-neuron-empty .icon {
+  width: 24px;
+  height: 24px;
+  color: var(--color-purple-strong);
+}
+
+.topic-neuron-empty strong {
+  color: #253246;
+  font-size: 13px;
+  font-weight: 920;
+}
+
+.topic-neuron-empty span {
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .quiz-floating-cta {
