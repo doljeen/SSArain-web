@@ -1,5 +1,3 @@
-import { mainMock } from "../../../data/mainMock.js";
-
 // mock 데이터를 state에 넣기 전에 깊은 복사해서 원본이 변경되지 않게 합니다.
 export const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -11,13 +9,26 @@ const markAncestorUsing = (topics) => topics.map((topic) => {
   return { ...topic, children, isUsing: toBoolean(topic.isUsing) || hasVisibleChild };
 });
 
-// WAS Brain DTO(id, name, description)를 화면의 Brain 항목으로 정규화합니다.
+const normalizeRole = (role) => String(role || "").toUpperCase();
+
+const pickBrainRole = (brain) => normalizeRole(
+  brain.brainRole
+  || brain.memberRole
+  || brain.myRole
+  || brain.currentUserRole
+  || brain.brainMemberRole
+  || brain.authority
+  || brain.role
+);
+
+// WAS Brain DTO(id, name, description, brainRole)를 화면의 Brain 항목으로 정규화합니다.
 export const normalizeBrain = (brain) => ({
-  id: String(brain.id),
+  id: String(brain.id ?? brain.bid ?? brain.brainId ?? ""),
   name: brain.name,
   description: brain.description || "",
   joinPolicy: brain.joinPolicy || "PROTECTED",
-  role: brain.role || brain.memberRole || brain.brainRole || "",
+  role: pickBrainRole(brain),
+  brainRole: pickBrainRole(brain),
   owner: brain.adminName || "나",
   members: Array.isArray(brain.memberNames) ? brain.memberNames.length : 1,
   topicsCount: Array.isArray(brain.topics) ? brain.topics.length : 0
@@ -105,8 +116,8 @@ export const buildTopicTree = (topics) => {
     roots.push(topic);
   });
 
-  // 루트가 없으면 첫 화면 요구사항에 맞게 빈 Topic 목록을 유지합니다.
-  return roots.length ? markAncestorUsing(roots) : clone(mainMock.topics);
+  // 루트가 없으면 mock Topic을 섞지 않고 빈 목록을 유지합니다.
+  return roots.length ? markAncestorUsing(roots) : [];
 };
 
 // tree 구조의 Topic을 현재 Topic 검색/클러스터 계산에 쓰기 쉬운 flat 배열로 펼칩니다.

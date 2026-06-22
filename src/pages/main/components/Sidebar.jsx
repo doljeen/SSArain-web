@@ -102,7 +102,7 @@ export default function Sidebar({
       <section className="brain-list" aria-labelledby="brains-heading">
         <div className="section-row">
           <h2 className="section-heading" id="brains-heading">MY BRAINS</h2>
-          <span className={`api-chip ${apiStatus === "was" ? "is-live" : ""}`}>{apiStatus === "was" ? "WAS" : "MOCK"}</span>
+          {apiStatus === "was" && <span className="api-chip is-live">WAS</span>}
         </div>
         {pageData.brains.map((brain) => {
           const isActive = brain.id === pageData.activeBrainId;
@@ -145,7 +145,7 @@ export default function Sidebar({
       {isAuthenticated && <footer className="user-footer">
         <button className="user-profile" type="button" onClick={(event) => onRoute(event, "/mypage")}>
           <span className="user-avatar"><Icon name="user" /></span>
-          <span><strong>{pageData.user.name || "Admin User"}</strong><small>{pageData.user.email || "admin@ssarain.io"}</small></span>
+          <span><strong>{pageData.user.name || "사용자"}</strong><small>{pageData.user.email || ""}</small></span>
         </button>
         <div className="footer-actions">
           <button type="button" onClick={onLogout}>로그아웃</button>
