@@ -88,7 +88,38 @@
 }
 
 .brain-name-row {
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px;
+  gap: 14px;
+  align-items: end;
+}
+
+.brain-name-row button {
+  height: 64px;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: var(--color-purple-strong);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.brain-name-row button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.brain-name-helper {
+  margin: -8px 0 2px;
+  font-size: 13px;
+  font-weight: 840;
+}
+
+.brain-name-helper.is-success {
+  color: #16a34a;
+}
+
+.brain-name-helper.is-error {
+  color: #ef4444;
 }
 
 .brain-create-form input,
@@ -231,6 +262,7 @@
     margin-top: 32px;
   }
 
+  .brain-name-row,
   .member-search-row {
     grid-template-columns: 1fr;
   }

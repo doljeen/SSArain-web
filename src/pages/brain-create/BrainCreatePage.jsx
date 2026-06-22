@@ -24,8 +24,16 @@ export default function BrainCreatePage() {
   const [members, setMembers] = useState([]);
   const [status, setStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCheckingName, setIsCheckingName] = useState(false);
+  const [nameCheck, setNameCheck] = useState({
+    checkedName: "",
+    isDuplicated: false,
+    message: ""
+  });
 
-  const canCreate = Boolean(form.name.trim());
+  const normalizedBrainName = form.name.trim();
+  const isNameChecked = Boolean(nameCheck.checkedName && nameCheck.checkedName === normalizedBrainName);
+  const canCreate = Boolean(normalizedBrainName && isNameChecked && !nameCheck.isDuplicated);
 
   const moveTo = (path) => {
     routeTo(path);
@@ -34,6 +42,37 @@ export default function BrainCreatePage() {
   const updateField = (event) => {
     const { name, value, checked, type } = event.target;
     setForm((current) => ({ ...current, [name]: type === "checkbox" ? checked : value }));
+    if (name === "name") {
+      setNameCheck({ checkedName: "", isDuplicated: false, message: "" });
+    }
+  };
+
+  const checkBrainName = async () => {
+    if (!normalizedBrainName) {
+      setNameCheck({ checkedName: "", isDuplicated: false, message: "Brain 이름을 먼저 입력해주세요." });
+      return;
+    }
+
+    setIsCheckingName(true);
+    setStatus("");
+
+    try {
+      const result = await apiGet(endpoints.brains.nameCheck(normalizedBrainName));
+      const isDuplicated = Boolean(result?.isDuplicated ?? result?.duplicated);
+      setNameCheck({
+        checkedName: normalizedBrainName,
+        isDuplicated,
+        message: isDuplicated ? "이미 사용 중인 Brain 이름입니다." : "사용 가능한 Brain 이름입니다."
+      });
+    } catch (error) {
+      setNameCheck({
+        checkedName: "",
+        isDuplicated: false,
+        message: `Brain 이름 확인 실패 · ${error.message}`
+      });
+    } finally {
+      setIsCheckingName(false);
+    }
   };
 
   // 입력한 이름/이메일을 생성 이후 Brain 초대 후보 검색 API에 사용할 목록으로 보관합니다.
@@ -95,13 +134,23 @@ export default function BrainCreatePage() {
   const submit = async (event) => {
     event.preventDefault();
 
-    if (!canCreate) {
+    if (!normalizedBrainName) {
       setStatus("Brain 이름을 입력해주세요.");
       return;
     }
 
+    if (!isNameChecked) {
+      setStatus("Brain 이름 중복 확인을 먼저 완료해주세요.");
+      return;
+    }
+
+    if (nameCheck.isDuplicated) {
+      setStatus("이미 사용 중인 Brain 이름입니다. 다른 이름을 입력해주세요.");
+      return;
+    }
+
     const payload = {
-      name: form.name.trim(),
+      name: normalizedBrainName,
       description: form.description.trim(),
       // 체크 ON: 가입 승인 필요(PROTECTED), 체크 OFF: 누구나 가입 가능(PUBLIC)
       joinPolicy: form.joinPolicy ? "PROTECTED" : "PUBLIC"
@@ -184,7 +233,15 @@ export default function BrainCreatePage() {
               <span>Brain 이름</span>
               <input name="name" type="text" value={form.name} onChange={updateField} placeholder="Brain 이름" maxLength={50} required />
             </label>
+            <button type="button" onClick={checkBrainName} disabled={isCheckingName || !normalizedBrainName}>
+              {isCheckingName ? "확인 중" : "중복 확인"}
+            </button>
           </div>
+          {nameCheck.message && (
+            <p className={`brain-name-helper ${isNameChecked && !nameCheck.isDuplicated ? "is-success" : "is-error"}`} role="status">
+              {nameCheck.message}
+            </p>
+          )}
 
           <label>
             <span>Brain 소개 문구</span>

@@ -14,6 +14,7 @@ export default function Sidebar({
   activeBrain,
   activeTopic,
   apiStatus,
+  canManageWorkspace,
   isAuthenticated,
   onRoute,
   onSelectBrain,
@@ -113,7 +114,7 @@ export default function Sidebar({
                 <span>{brain.name}</span>
                 {isActive && <span className="status-dot" aria-hidden="true" />}
               </button>
-              {isActive && (
+              {isActive && canManageWorkspace && (
                 <button className="brain-manage-button" type="button" data-endpoint={endpoints.brains.members(brain.id)} onClick={(event) => onOpenBrainManage(event, brain.id)}>
                   관리
                 </button>

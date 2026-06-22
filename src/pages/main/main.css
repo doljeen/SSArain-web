@@ -1763,6 +1763,14 @@ button {
   gap: 6px;
 }
 
+.neuron-detail-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .neuron-avatar,
 .comment-avatar {
   width: 38px;
@@ -1818,6 +1826,21 @@ button {
   background: var(--color-purple-strong);
   color: #ffffff;
   box-shadow: 0 16px 28px rgba(101, 87, 255, 0.24);
+}
+
+.neuron-delete-button {
+  min-width: 116px;
+  height: 54px;
+  padding: 0 16px;
+  border-radius: 16px;
+  background: #fff1f2;
+  color: #e11d48;
+  font-size: 14px;
+  font-weight: 930;
+}
+
+.neuron-delete-button:hover {
+  background: #ffe4e6;
 }
 
 .neuron-body {

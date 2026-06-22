@@ -184,8 +184,10 @@ export default function Workspace({
   quizGenerationCount,
   quizGenerationLimit,
   commentDraft,
+  canDeleteNode,
   onCloseNodeDetail,
   onToggleNodeRecommend,
+  onDeleteNode,
   onOpenQuiz,
   onGenerateQuiz,
   onSelectQuizOption,
@@ -224,9 +226,8 @@ export default function Workspace({
     return nodeDetail.data.comments.find((comment) => String(comment.id) === String(targetId)) || null;
   }, [commentDraft.editingId, commentDraft.parentId, nodeDetail?.data]);
   const currentUserName = pageData.user?.name || "";
-  const currentRole = String(pageData.user?.role || "").toUpperCase();
-  const canModerateComments = ["ADMIN", "MANAGER", "LEADER"].includes(currentRole);
-  const canGenerateQuiz = canManageWorkspace && manageMode && ["ADMIN", "MANAGER", "LEADER"].includes(currentRole);
+  const canModerateComments = canManageWorkspace;
+  const canGenerateQuiz = canManageWorkspace && manageMode;
   const quizLimitReached = Number(quizGenerationCount || 0) >= Number(quizGenerationLimit || 2);
   const quizScore = useMemo(() => {
     if (!quizState?.quizzes?.length) return { correct: 0, total: 0 };
@@ -518,10 +519,17 @@ export default function Workspace({
                       {nodeDetail.data.createdAt && <span><Icon name="clock" />{formatDate(nodeDetail.data.createdAt)}</span>}
                     </div>
                   </div>
-                  <button className={`recommend-button ${nodeDetail.liked ? "is-active" : ""}`} type="button" onClick={onToggleNodeRecommend}>
-                    <Icon name="plus" />
-                    <span>추천 {nodeDetail.data.recommends || 0}</span>
-                  </button>
+                  <div className="neuron-detail-actions">
+                    <button className={`recommend-button ${nodeDetail.liked ? "is-active" : ""}`} type="button" onClick={onToggleNodeRecommend}>
+                      <Icon name="plus" />
+                      <span>추천 {nodeDetail.data.recommends || 0}</span>
+                    </button>
+                    {canDeleteNode && (
+                      <button className="neuron-delete-button" type="button" onClick={onDeleteNode}>
+                        Neuron 삭제
+                      </button>
+                    )}
+                  </div>
                 </header>
 
                 <section className="neuron-body">

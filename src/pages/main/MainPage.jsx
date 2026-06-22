@@ -268,7 +268,24 @@ export default function MainPage() {
   const isZoomed = graph.scale >= 1.28;
   const isAuthenticated = authStatus === "authenticated";
   const isBrainSearchView = isBrainSearchRoute(route);
-  const canManageWorkspace = Boolean(isAuthenticated && activeBrain);
+  const userRole = String(pageData.user?.role || "").toUpperCase();
+  const activeBrainRole = String(activeBrain?.role || "").toUpperCase();
+  const canManageWorkspace = Boolean(
+    isAuthenticated
+    && activeBrain
+    && (canUseManageMode(activeBrainRole) || userRole === "ADMIN")
+  );
+  const canAdministerWorkspace = Boolean(
+    isAuthenticated
+    && activeBrain
+    && (activeBrainRole === "ADMIN" || userRole === "ADMIN")
+  );
+  const isCurrentUserWriter = (writer) => {
+    const targetWriter = String(writer || "").trim();
+    const currentUserName = String(pageData.user?.name || "").trim();
+    return Boolean(targetWriter && currentUserName && targetWriter === currentUserName);
+  };
+  const canDeleteNode = (node) => Boolean(node && (canAdministerWorkspace || isCurrentUserWriter(node.writer)));
 
   const rememberTopicCatalog = (brainId, catalog) => {
     if (!brainId) return;
@@ -1087,6 +1104,35 @@ export default function MainPage() {
     handleRouteClick(event, nextRoute);
   };
 
+  const deleteNode = async () => {
+    const nodeId = nodeDetail.data?.id;
+    if (!nodeId) return;
+    if (!canDeleteNode(nodeDetail.data)) {
+      showToast("Neuron 삭제는 관리자, 반장 또는 작성자만 가능합니다.");
+      return;
+    }
+
+    const shouldDelete = window.confirm("이 Neuron을 삭제할까요? 삭제 후에는 되돌릴 수 없습니다.");
+    if (!shouldDelete) return;
+
+    try {
+      await apiDelete(endpoints.nodes.remove(nodeId));
+      const nextRoute = activeTopic ? `/topics/${activeTopic.id}/posts` : "/main/posts";
+      setPageData((current) => ({
+        ...current,
+        nodes: current.nodes.filter((node) => String(node.id) !== String(nodeId))
+      }));
+      setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
+      setCommentDraft({ content: "", status: "", isSubmitting: false, parentId: null, editingId: null });
+      setView("posts");
+      setRoute(nextRoute);
+      routeTo(nextRoute);
+      showToast("Neuron 삭제 완료");
+    } catch (error) {
+      showToast(`Neuron 삭제 실패 · ${error.message}`);
+    }
+  };
+
   const toggleNodeRecommend = () => {
     setNodeDetail((current) => {
       if (!current.data) return current;
@@ -1577,6 +1623,7 @@ export default function MainPage() {
         activeBrain={activeBrain}
         activeTopic={activeTopic}
         apiStatus={apiStatus}
+        canManageWorkspace={canManageWorkspace}
         isAuthenticated={isAuthenticated}
         pageData={pageData}
         onMoveToTopic={moveToTopic}
@@ -1627,8 +1674,10 @@ export default function MainPage() {
         quizGenerationCount={Number(quizGenerationCounts[String(activeTopic?.btid)] || 0)}
         quizGenerationLimit={QUIZ_GENERATION_LIMIT}
         commentDraft={commentDraft}
+        canDeleteNode={canDeleteNode(nodeDetail.data)}
         onCloseNodeDetail={closeNodeDetail}
         onToggleNodeRecommend={toggleNodeRecommend}
+        onDeleteNode={deleteNode}
         onOpenQuiz={openQuizView}
         onGenerateQuiz={generateTopicQuizzes}
         onSelectQuizOption={selectQuizOption}
