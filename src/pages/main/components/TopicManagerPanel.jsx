@@ -5,11 +5,9 @@ const isTopicUsing = (value) => value === true || value === "true" || value === 
 
 // 관리모드에서 공통 Topic을 세로 트리로 관리하는 패널입니다.
 export default function TopicManagerPanel({
-  mode,
   topics,
   onClose,
   onCreateTopic,
-  onDeleteTopic,
   onToggleTopicUse
 }) {
   const [expanded, setExpanded] = useState({});
@@ -21,10 +19,8 @@ export default function TopicManagerPanel({
     return countTopics(topics);
   }, [topics]);
 
-  const title = mode === "delete" ? "토픽 삭제" : "토픽 관리";
-  const copy = mode === "delete"
-    ? "삭제할 토픽을 선택하세요. 현재 WAS 삭제 API가 없어 화면 상태에서 먼저 제거됩니다."
-    : "초록색은 현재 Brain에 표시되는 토픽, 빨간색은 숨김 토픽입니다. + 버튼으로 하위 토픽을 추가할 수 있습니다.";
+  const title = "토픽 관리";
+  const copy = "초록색은 현재 Brain에 표시되는 토픽, 빨간색은 숨김 토픽입니다. + 버튼으로 하위 토픽을 추가할 수 있습니다.";
 
   const toggleExpand = (topicId) => {
     setExpanded((current) => ({ ...current, [topicId]: !current[topicId] }));
@@ -65,16 +61,9 @@ export default function TopicManagerPanel({
               </button>
 
               <div className="vertical-topic-actions">
-                {mode === "manage" && (
-                  <button className="topic-small-action" type="button" onClick={() => openCreate(topic)} aria-label={`${topic.name} 하위 토픽 생성`}>
-                    <Icon name="plus" />
-                  </button>
-                )}
-                {mode === "delete" && (
-                  <button className="topic-small-action is-danger" type="button" onClick={() => onDeleteTopic(topic)} aria-label={`${topic.name} 삭제`}>
-                    ×
-                  </button>
-                )}
+                <button className="topic-small-action" type="button" onClick={() => openCreate(topic)} aria-label={`${topic.name} 하위 토픽 생성`}>
+                  <Icon name="plus" />
+                </button>
               </div>
             </div>
 

@@ -165,10 +165,6 @@ const addChildTopic = (topics, parentId, childTopic) => topics.map((topic) => (
     : { ...topic, children: addChildTopic(topic.children || [], parentId, childTopic) }
 ));
 
-const removeTopicById = (topics, topicId) => topics
-  .filter((topic) => String(topic.id) !== String(topicId))
-  .map((topic) => ({ ...topic, children: removeTopicById(topic.children || [], topicId) }));
-
 const topicUseMap = (topics, map = new Map()) => {
   topics.forEach((topic) => {
     map.set(String(topic.id), isTopicUsing(topic.isUsing));
@@ -183,19 +179,7 @@ const applyTopicUseMap = (topics, useMap) => topics.map((topic) => ({
   children: applyTopicUseMap(topic.children || [], useMap)
 }));
 
-const applyVisibleTopicIds = (topics, visibleIds) => topics.map((topic) => ({
-  ...topic,
-  isUsing: visibleIds.has(String(topic.id)),
-  children: applyVisibleTopicIds(topic.children || [], visibleIds)
-}));
-
-const collectTopicIds = (topics, ids = new Set()) => {
-  topics.forEach((topic) => {
-    ids.add(String(topic.id));
-    collectTopicIds(topic.children || [], ids);
-  });
-  return ids;
-};
+const buildApiTopicTree = (topics = []) => Array.isArray(topics) && topics.length ? buildTopicTree(topics) : [];
 
 const markAncestorUsing = (topics) => topics.map((topic) => {
   const children = markAncestorUsing(topic.children || []);
@@ -209,27 +193,6 @@ const visibleTopicTree = (topics) => topics.reduce((visible, topic) => {
   if (isUsing || children.length) visible.push({ ...topic, isUsing: isUsing || children.length > 0, children });
   return visible;
 }, []);
-
-const topicMetaMap = (topics, map = new Map()) => {
-  topics.forEach((topic) => {
-    map.set(String(topic.id), {
-      btid: topic.btid == null ? null : String(topic.btid),
-      isUsing: isTopicUsing(topic.isUsing)
-    });
-    topicMetaMap(topic.children || [], map);
-  });
-  return map;
-};
-
-const applyBrainTopicMeta = (topics, metaMap) => topics.map((topic) => {
-  const meta = metaMap.get(String(topic.id));
-  return {
-    ...topic,
-    btid: meta?.btid ?? topic.btid ?? null,
-    isUsing: meta ? meta.isUsing : false,
-    children: applyBrainTopicMeta(topic.children || [], metaMap)
-  };
-});
 
 const updateTopicBtid = (topics, topicId, btid) => topics.map((topic) => (
   String(topic.id) === String(topicId)
@@ -304,17 +267,18 @@ export default function MainPage() {
     topicCatalogByBrain.current[String(brainId)] = catalog;
   };
 
-  const mergeCommonTopicsWithBrainUse = (commonTopics, brainTopics) => {
-    return markAncestorUsing(applyBrainTopicMeta(commonTopics, topicMetaMap(visibleTopicTree(brainTopics))));
+  const loadTopicBranchFromT02 = async (topic, brainId) => {
+    const childTopics = await apiGet(endpoints.topics.children(topic.id, brainId));
+    const children = await Promise.all(
+      buildApiTopicTree(childTopics || []).map((child) => loadTopicBranchFromT02(child, brainId))
+    );
+    return { ...topic, children };
   };
 
-  const loadCommonTopicCatalog = async () => {
-    if (commonTopicCatalog.current.length) return clone(commonTopicCatalog.current);
-
-    const topics = await apiGet(endpoints.topics.list());
-    const catalog = markAncestorUsing(buildTopicTree(topics || []));
-    commonTopicCatalog.current = catalog;
-    return clone(catalog);
+  const loadTopicCatalogFromTopicApi = async (brainId) => {
+    const rootTopics = buildApiTopicTree(await apiGet(endpoints.topics.list(brainId)) || []);
+    const rootBranches = await Promise.all(rootTopics.map((topic) => loadTopicBranchFromT02(topic, brainId)));
+    return markAncestorUsing(rootBranches);
   };
 
   const restoreBrainTopicCatalog = (brainId, topics, options = {}) => {
@@ -390,11 +354,9 @@ export default function MainPage() {
     if (!activeBrain) return topicCatalog;
 
     try {
-      const commonCatalog = await loadCommonTopicCatalog();
-      const brainDetail = await apiGet(endpoints.brains.topics(activeBrain.id));
-      const brainCatalog = restoreBrainTopicCatalog(activeBrain.id, buildTopicTree(brainDetail?.topics || []), { preferCached: false });
-      const catalog = restoreBrainTopicCatalog(activeBrain.id, mergeCommonTopicsWithBrainUse(commonCatalog, brainCatalog), { preferCached: false });
+      const catalog = restoreBrainTopicCatalog(activeBrain.id, await loadTopicCatalogFromTopicApi(activeBrain.id), { preferCached: false });
       setTopicCatalog(catalog);
+      commonTopicCatalog.current = catalog;
       rememberTopicCatalog(activeBrain.id, catalog);
       syncVisibleTopics(catalog);
       return catalog;
@@ -1341,10 +1303,10 @@ export default function MainPage() {
   // 오른쪽 패널 접기/펼치기 토글입니다.
   const toggleRight = () => setRightCollapsed((value) => !value);
 
-  // 관리모드의 Topic 추가 버튼은 우선 진입점만 열어두고, 생성 화면은 이후 구현합니다.
-  const openTopicPanel = async (mode) => {
+  // 관리모드에서 공통 Topic 트리를 열어 Brain별 표시 상태를 관리합니다.
+  const openTopicPanel = async () => {
     await loadTopicCatalog();
-    setTopicPanelMode(mode);
+    setTopicPanelMode("manage");
   };
 
   const createTopicFromPanel = async (parentTopicId, name) => {
@@ -1401,17 +1363,6 @@ export default function MainPage() {
     }
 
     showToast(nextState ? `${topic.name} Topic 표시` : `${topic.name} Topic 숨김`);
-  };
-
-  const deleteTopicFromPanel = (topic) => {
-    setTopicCatalog((current) => {
-      const nextCatalog = removeTopicById(current, topic.id);
-      commonTopicCatalog.current = removeTopicById(commonTopicCatalog.current, topic.id);
-      rememberTopicCatalog(activeBrain?.id, nextCatalog);
-      syncVisibleTopics(nextCatalog);
-      return nextCatalog;
-    });
-    showToast(`${topic.name} Topic 삭제 UI 반영 · WAS 삭제 API 연결 대기`);
   };
 
   const loadBrainManagerData = async (brainId, keyword = "") => {
@@ -1690,11 +1641,9 @@ export default function MainPage() {
       )}
       {topicPanelMode && (
         <TopicManagerPanel
-          mode={topicPanelMode}
           topics={topicCatalog}
           onClose={() => setTopicPanelMode(null)}
           onCreateTopic={createTopicFromPanel}
-          onDeleteTopic={deleteTopicFromPanel}
           onToggleTopicUse={toggleTopicUse}
         />
       )}

@@ -593,11 +593,8 @@ export default function Workspace({
           ) : null}
           {view === "synapse" && manageMode && canManageWorkspace && (
             <div className="manage-action-dock" aria-label="Topic management actions">
-              <button className="manage-action-button" type="button" onClick={() => onOpenTopicPanel("manage")}>
+              <button className="manage-action-button" type="button" onClick={onOpenTopicPanel}>
                 <span>토픽 관리</span>
-              </button>
-              <button className="manage-action-button danger" type="button" onClick={() => onOpenTopicPanel("delete")}>
-                <span>토픽 삭제</span>
               </button>
             </div>
           )}
