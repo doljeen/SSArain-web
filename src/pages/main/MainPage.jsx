@@ -565,7 +565,7 @@ export default function MainPage() {
     try {
       const detail = await apiGet(endpoints.nodes.detail(nodeId));
       const normalizedDetail = normalizeNodeDetail(detail);
-      setNodeDetail({ isOpen: true, isLoading: false, data: normalizedDetail, status: "", liked: false });
+      setNodeDetail({ isOpen: true, isLoading: false, data: normalizedDetail, status: "", liked: normalizedDetail.liked });
       setPageData((current) => ({
         ...current,
         nodes: current.nodes.map((node) => (
@@ -1244,20 +1244,44 @@ export default function MainPage() {
     }
   };
 
-  const toggleNodeRecommend = () => {
-    setNodeDetail((current) => {
-      if (!current.data) return current;
-      const liked = !current.liked;
-      return {
+  const toggleNodeRecommend = async () => {
+    const nodeId = nodeDetail.data?.id;
+    if (!nodeId) return;
+
+    try {
+      const result = await apiPost(endpoints.nodes.like(nodeId), {});
+      const nextLikeCount = result?.likeCount ?? nodeDetail.data.recommends ?? 0;
+      const nextLiked = result?.liked ?? !nodeDetail.liked;
+
+      setNodeDetail((current) => {
+        if (!current.data || String(current.data.id) !== String(nodeId)) return current;
+        return {
+          ...current,
+          liked: nextLiked,
+          data: {
+            ...current.data,
+            recommends: nextLikeCount,
+            liked: nextLiked
+          }
+        };
+      });
+      setPageData((current) => ({
         ...current,
-        liked,
-        data: {
-          ...current.data,
-          recommends: Math.max(0, (current.data.recommends || 0) + (liked ? 1 : -1))
-        }
-      };
-    });
-    showToast("추천 API가 준비되면 WAS에 저장되도록 연결할 예정입니다.");
+        nodes: current.nodes.map((node) => (
+          String(node.id) === String(nodeId) ? { ...node, recommends: nextLikeCount } : node
+        )),
+        topicNodesById: Object.fromEntries(
+          Object.entries(current.topicNodesById || {}).map(([topicId, nodes]) => [
+            topicId,
+            nodes.map((node) => (
+              String(node.id) === String(nodeId) ? { ...node, recommends: nextLikeCount } : node
+            ))
+          ])
+        )
+      }));
+    } catch (error) {
+      showToast(`추천 처리 실패 · ${error.message}`);
+    }
   };
 
   const updateCommentDraft = (event) => {

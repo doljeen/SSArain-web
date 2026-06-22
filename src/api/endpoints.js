@@ -20,7 +20,12 @@ export const endpoints = {
   // 사용자 정보 조회와 이름 중복 확인 엔드포인트입니다.
   users: {
     me: "/user",
-    nameCheck: "/user/name-check"
+    nameCheck: "/user/name-check",
+    activities: {
+      neurons: (page = 0, size = 10) => `/user/activities/neurons?${query({ page, size })}`,
+      comments: (page = 0, size = 10) => `/user/activities/comments?${query({ page, size })}`,
+      likedNeurons: (page = 0, size = 10) => `/user/activities/liked-neurons?${query({ page, size })}`
+    }
   },
   // Brain 관련 엔드포인트입니다. 일부는 이후 페이지 구현을 위해 미리 정리해둔 상태입니다.
   brains: {
@@ -56,7 +61,8 @@ export const endpoints = {
     detail: (nodeId) => `/neurons/${nodeId}`,
     create: "/neurons",
     update: (nodeId) => `/neurons/${nodeId}`,
-    remove: (nodeId) => `/neurons/${nodeId}`
+    remove: (nodeId) => `/neurons/${nodeId}`,
+    like: (nodeId) => `/neurons/${nodeId}/like`
   },
   // 댓글 관련 엔드포인트입니다.
   comments: {
@@ -114,7 +120,8 @@ export const endpointMeta = {
     detail: { code: "N02", method: "GET" },
     create: { code: "N03", method: "POST" },
     update: { code: "N04", method: "PATCH" },
-    remove: { code: "N05", method: "DELETE" }
+    remove: { code: "N05", method: "DELETE" },
+    like: { code: "N06", method: "POST" }
   },
   comments: {
     create: { code: "C01", method: "POST" },
@@ -127,7 +134,10 @@ export const endpointMeta = {
   },
   users: {
     me: { code: "U01", method: "GET" },
-    nameCheck: { code: "U03", method: "POST" }
+    nameCheck: { code: "U03", method: "POST" },
+    writtenNeurons: { code: "U04", method: "GET" },
+    writtenComments: { code: "U05", method: "GET" },
+    likedNeurons: { code: "U06", method: "GET" }
   },
   notifications: {
     list: { code: "NO01", method: null }

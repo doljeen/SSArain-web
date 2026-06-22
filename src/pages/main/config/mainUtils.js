@@ -30,7 +30,8 @@ export const normalizeNodes = (nodes = []) => nodes.map((node) => ({
   content: node.content,
   writer: node.writer || "",
   createdAt: node.createdAt || "",
-  comments: node.commentCount ?? node.commentsCount ?? node.comments?.length ?? node.comments ?? 0
+  comments: node.commentCount ?? node.commentsCount ?? node.comments?.length ?? node.comments ?? 0,
+  recommends: node.recommends ?? node.likeCount ?? 0
 }));
 
 export const normalizeComments = (comments = []) => comments.filter(Boolean).map((comment) => ({
@@ -48,7 +49,8 @@ export const normalizeNodeDetail = (node = {}) => ({
   writer: node.writer || "작성자",
   createdAt: node.createdAt || "",
   comments: normalizeComments(node.comments || []),
-  recommends: node.recommends || node.likeCount || 0
+  recommends: node.recommends ?? node.likeCount ?? 0,
+  liked: toBoolean(node.liked)
 });
 
 // WAS Quiz DTO(qid, question, explanation, options)를 화면에서 채점하기 쉬운 형태로 정리합니다.

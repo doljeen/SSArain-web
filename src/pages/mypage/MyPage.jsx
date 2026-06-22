@@ -31,12 +31,66 @@ const activitySections = [
   }
 ];
 
+const initialActivityData = activitySections.reduce((acc, section) => ({
+  ...acc,
+  [section.id]: {
+    count: 0,
+    items: [],
+    hasLoaded: false
+  }
+}), {});
+
 const roleLabel = (role) => ({
   ADMIN: "관리자",
   MANAGER: "반장",
   LEADER: "반장",
   USER: "일반학생"
 }[role] || "일반학생");
+
+const formatActivityDate = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+};
+
+const getActivityTotal = (page) => Number(page?.totalElements ?? page?.activities?.length ?? 0);
+
+const getNeuronRoute = (activity) => activity?.nid ? `/nodes/${activity.nid}` : (activity?.tid ? `/topics/${activity.tid}/posts` : "/main");
+
+const normalizeNeuronActivities = (page, emptyLabel, metaPrefix = "작성일") => ({
+  count: getActivityTotal(page),
+  hasLoaded: true,
+  items: (page?.activities || []).map((activity, index) => {
+    const dateText = formatActivityDate(activity.createdAt);
+    return {
+      id: `neuron-${activity.nid ?? index}`,
+      title: activity.title || emptyLabel,
+      meta: dateText ? `${metaPrefix} ${dateText}` : `${metaPrefix} 정보 없음`,
+      route: getNeuronRoute(activity)
+    };
+  })
+});
+
+const normalizeCommentActivities = (page) => ({
+  count: getActivityTotal(page),
+  hasLoaded: true,
+  items: (page?.activities || []).map((activity, index) => {
+    const dateText = formatActivityDate(activity.createdAt);
+    return {
+      id: `comment-${activity.cid ?? index}`,
+      title: activity.content || "내용 없는 댓글",
+      meta: dateText ? `댓글 작성일 ${dateText}` : "작성일 정보 없음",
+      route: getNeuronRoute(activity)
+    };
+  })
+});
 
 export default function MyPage() {
   // WAS /user 응답으로 채워지는 사용자 프로필 정보입니다.
@@ -51,6 +105,9 @@ export default function MyPage() {
   const [status, setStatus] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [activeActivity, setActiveActivity] = useState("nodes");
+  const [activityData, setActivityData] = useState(initialActivityData);
+  const [activityStatus, setActivityStatus] = useState("");
+  const [isActivityLoading, setIsActivityLoading] = useState(false);
 
   const moveTo = (path) => {
     routeTo(path);
@@ -59,11 +116,12 @@ export default function MyPage() {
   const userSummary = user?.summary || {};
   const resolvedActivitySections = activitySections.map((section) => ({
     ...section,
-    count: {
+    count: activityData[section.id]?.hasLoaded ? activityData[section.id].count : ({
       nodes: userSummary.nodeCount,
       comments: userSummary.commentCount,
       thumbs: userSummary.likeCount
-    }[section.id] ?? section.count
+    }[section.id] ?? section.count),
+    items: activityData[section.id]?.items || []
   }));
   const selectedActivity = resolvedActivitySections.find((section) => section.id === activeActivity) || resolvedActivitySections[0];
   const displayName = user?.name || "프로필 불러오는 중";
@@ -88,6 +146,35 @@ export default function MyPage() {
 
   // 마이페이지 진입 시 로그인된 사용자의 정보를 조회합니다.
   useEffect(() => {
+    const loadActivities = async () => {
+      setIsActivityLoading(true);
+      setActivityStatus("");
+
+      const [neuronsResult, commentsResult, likedResult] = await Promise.allSettled([
+        apiGet(endpoints.users.activities.neurons(0, 10)),
+        apiGet(endpoints.users.activities.comments(0, 10)),
+        apiGet(endpoints.users.activities.likedNeurons(0, 10))
+      ]);
+
+      setActivityData({
+        nodes: neuronsResult.status === "fulfilled"
+          ? normalizeNeuronActivities(neuronsResult.value, "제목 없는 Neuron")
+          : { ...initialActivityData.nodes, hasLoaded: true },
+        comments: commentsResult.status === "fulfilled"
+          ? normalizeCommentActivities(commentsResult.value)
+          : { ...initialActivityData.comments, hasLoaded: true },
+        thumbs: likedResult.status === "fulfilled"
+          ? normalizeNeuronActivities(likedResult.value, "제목 없는 Neuron", "추천한 Neuron")
+          : { ...initialActivityData.thumbs, hasLoaded: true }
+      });
+
+      const failed = [neuronsResult, commentsResult, likedResult].filter((result) => result.status === "rejected");
+      if (failed.length > 0) {
+        setActivityStatus("일부 활동 목록을 불러오지 못했습니다.");
+      }
+      setIsActivityLoading(false);
+    };
+
     const loadUser = async () => {
       setIsLoading(true);
       setStatus("");
@@ -98,6 +185,7 @@ export default function MyPage() {
           sessionStorage.setItem(AUTH_STATE_KEY, "true");
           setUser(normalizeUserInfo(userInfo));
         }
+        await loadActivities();
       } catch (error) {
         sessionStorage.removeItem(AUTH_STATE_KEY);
         routeTo("/login");
@@ -166,7 +254,7 @@ export default function MyPage() {
         </article>
 
         <section className="mypage-grid">
-          {/* WAS /user 통계로 개수를 보여주고, 상세 목록은 목록 API가 생기면 연결합니다. */}
+          {/* WAS 활동 API로 작성/댓글/추천 목록을 보여주는 영역입니다. */}
           <section className="activity-panel" aria-labelledby="activity-heading">
             <div className="activity-panel-head">
               <div>
@@ -200,7 +288,13 @@ export default function MyPage() {
             </div>
 
             <div className="mypage-activity-list">
-              {selectedActivity.items.length > 0 ? selectedActivity.items.map((item) => (
+              {isActivityLoading ? (
+                <div className="mypage-activity-empty">
+                  <Icon name={selectedActivity.icon} />
+                  <strong>활동을 불러오는 중입니다.</strong>
+                  <span>잠시만 기다려주세요.</span>
+                </div>
+              ) : selectedActivity.items.length > 0 ? selectedActivity.items.map((item) => (
                 <button key={item.id} className="mypage-activity-item" type="button" onClick={() => moveTo(item.route)}>
                   <span className="mypage-activity-icon"><Icon name={selectedActivity.icon} /></span>
                   <span>
@@ -212,7 +306,7 @@ export default function MyPage() {
                 <div className="mypage-activity-empty">
                   <Icon name={selectedActivity.icon} />
                   <strong>{selectedActivity.title} {selectedActivity.count}개</strong>
-                  <span>상세 목록 API가 추가되면 이 영역에 실제 목록을 연결합니다.</span>
+                  <span>{activityStatus || "아직 표시할 활동이 없습니다."}</span>
                 </div>
               )}
             </div>
