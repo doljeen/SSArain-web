@@ -20,6 +20,7 @@ export const endpoints = {
   // 사용자 정보 조회와 이름 중복 확인 엔드포인트입니다.
   users: {
     me: "/user",
+    password: "/user/password",
     nameCheck: "/user/name-check",
     activities: {
       neurons: (page = 0, size = 10) => `/user/activities/neurons?${query({ page, size })}`,
@@ -134,6 +135,7 @@ export const endpointMeta = {
   },
   users: {
     me: { code: "U01", method: "GET" },
+    password: { code: "U02", method: "PATCH" },
     nameCheck: { code: "U03", method: "POST" },
     writtenNeurons: { code: "U04", method: "GET" },
     writtenComments: { code: "U05", method: "GET" },

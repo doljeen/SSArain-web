@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiGet, apiPost } from "../../api/client.js";
+import { apiGet, apiPatch, apiPost } from "../../api/client.js";
 import { endpoints } from "../../api/endpoints.js";
 import { normalizeUserInfo } from "../main/config/mainUtils.js";
 import Icon from "../../shared/icons/Icon.jsx";
@@ -104,6 +104,7 @@ export default function MyPage() {
   });
   const [status, setStatus] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isPasswordSubmitting, setIsPasswordSubmitting] = useState(false);
   const [activeActivity, setActiveActivity] = useState("nodes");
   const [activityData, setActivityData] = useState(initialActivityData);
   const [activityStatus, setActivityStatus] = useState("");
@@ -203,9 +204,10 @@ export default function MyPage() {
     setPasswordForm((current) => ({ ...current, [name]: value }));
   };
 
-  // 비밀번호 변경 API가 추가되기 전까지는 유효성 검증과 안내 메시지만 처리합니다.
-  const submitPasswordChange = (event) => {
+  // WAS U02 비밀번호 변경 API에 현재 비밀번호와 새 비밀번호를 전달합니다.
+  const submitPasswordChange = async (event) => {
     event.preventDefault();
+    if (isPasswordSubmitting) return;
 
     if (!passwordForm.currentPassword || !passwordForm.nextPassword || !passwordForm.nextPasswordConfirm) {
       setStatus("비밀번호 변경 항목을 모두 입력해주세요.");
@@ -217,7 +219,21 @@ export default function MyPage() {
       return;
     }
 
-    setStatus("비밀번호 변경 API가 WAS에 추가되면 이 버튼에 연결됩니다.");
+    setIsPasswordSubmitting(true);
+    setStatus("");
+
+    try {
+      await apiPatch(endpoints.users.password, {
+        oldPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.nextPassword
+      });
+      setPasswordForm({ currentPassword: "", nextPassword: "", nextPasswordConfirm: "" });
+      setStatus("비밀번호가 변경되었습니다.");
+    } catch (error) {
+      setStatus(`비밀번호 변경 실패 · ${error.message}`);
+    } finally {
+      setIsPasswordSubmitting(false);
+    }
   };
 
   return (
@@ -330,7 +346,9 @@ export default function MyPage() {
               <span>변경할 비밀번호 확인</span>
               <input name="nextPasswordConfirm" type="password" value={passwordForm.nextPasswordConfirm} onChange={updatePasswordField} placeholder="새 비밀번호 확인" />
             </label>
-            <button className="password-submit" type="submit">비밀번호 변경</button>
+            <button className="password-submit" type="submit" disabled={isPasswordSubmitting}>
+              {isPasswordSubmitting ? "변경 중" : "비밀번호 변경"}
+            </button>
           </form>
 
           {/* 계정 권한만 간단히 보여주는 요약 패널입니다. */}
