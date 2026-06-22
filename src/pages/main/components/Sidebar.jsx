@@ -1,5 +1,12 @@
+import { useEffect, useMemo, useState } from "react";
 import { endpoints } from "../../../api/endpoints.js";
 import Icon from "../../../shared/icons/Icon.jsx";
+
+// Topic 트리의 모든 id를 모아서 새로 불러온 하위 Topic도 기본으로 펼쳐지게 합니다.
+const collectTopicIds = (topics = []) => topics.flatMap((topic) => [
+  String(topic.id),
+  ...collectTopicIds(topic.children || [])
+]);
 
 // 왼쪽 패널: Brain 목록, Topic 트리, 사용자 메뉴를 담당합니다.
 export default function Sidebar({
@@ -13,8 +20,67 @@ export default function Sidebar({
   onMoveToTopic,
   onOpenBrainManage,
   onOpenModal,
+  onResizeStart,
   onLogout
 }) {
+  const topicIds = useMemo(() => collectTopicIds(pageData.topics), [pageData.topics]);
+  const topicIdsKey = topicIds.join("|");
+  const [expandedTopicIds, setExpandedTopicIds] = useState(() => new Set(topicIds));
+
+  // Brain/Topic 목록이 바뀌면 현재 보유한 Topic은 모두 펼쳐서 최하위까지 바로 확인할 수 있게 합니다.
+  useEffect(() => {
+    setExpandedTopicIds(new Set(topicIds));
+  }, [topicIdsKey]);
+
+  const toggleTopicExpanded = (event, topicId) => {
+    event.stopPropagation();
+    setExpandedTopicIds((current) => {
+      const next = new Set(current);
+      const key = String(topicId);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const renderTopicTree = (topics = [], depth = 0) => topics.map((topic) => {
+    const children = topic.children || [];
+    const hasChildren = children.length > 0;
+    const isExpanded = expandedTopicIds.has(String(topic.id));
+    const isActive = String(topic.id) === String(pageData.activeTopicId);
+
+    return (
+      <section className="tree-group" key={topic.id} style={{ "--topic-depth": depth }}>
+        <div className={`tree-node ${isActive ? "is-active" : ""}`}>
+          <button
+            className={`tree-toggle ${isExpanded ? "is-expanded" : ""}`}
+            type="button"
+            onClick={(event) => hasChildren && toggleTopicExpanded(event, topic.id)}
+            aria-label={hasChildren ? `${topic.name} 하위 Topic ${isExpanded ? "접기" : "펼치기"}` : undefined}
+            aria-hidden={!hasChildren}
+            tabIndex={hasChildren ? 0 : -1}
+          >
+            {hasChildren ? "⌄" : ""}
+          </button>
+          <button
+            className="tree-row"
+            type="button"
+            data-endpoint={topic.btid ? endpoints.nodes.preview(topic.btid) : endpoints.topics.children(topic.id)}
+            onClick={(event) => onMoveToTopic(event, topic.id)}
+          >
+            <Icon name="folder" />
+            <span>{topic.name}</span>
+          </button>
+        </div>
+        {hasChildren && isExpanded && (
+          <div className="tree-children">
+            {renderTopicTree(children, depth + 1)}
+          </div>
+        )}
+      </section>
+    );
+  });
+
   return (
     <aside className="sidebar" aria-label="Brain navigation">
       {/* 브랜드 영역입니다. 왼쪽 사이드바는 항상 고정해서 Brain 탐색 기준을 유지합니다. */}
@@ -68,23 +134,7 @@ export default function Sidebar({
           <h2 className="section-heading" id="topics-heading">TOPICS</h2>
         </div>
         <div className="topic-tree">
-          {pageData.topics.map((topic) => (
-            <section className="tree-group" key={topic.id}>
-              <button className="tree-row" type="button" data-endpoint={endpoints.topics.children(topic.id)} onClick={(event) => onMoveToTopic(event, topic.id)}>
-                <span className="chevron" aria-hidden="true">⌄</span>
-                <Icon name="folder" />
-                <span>{topic.name}</span>
-              </button>
-              <div className="tree-children">
-                {(topic.children || []).map((child) => (
-                  <button key={child.id} className={`tree-child ${child.id === pageData.activeTopicId ? "is-active" : ""}`} type="button" data-endpoint={child.btid ? endpoints.nodes.preview(child.btid) : ""} onClick={(event) => onMoveToTopic(event, child.id)}>
-                    <Icon name="folder" />
-                    <span>{child.name}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          ))}
+          {renderTopicTree(pageData.topics)}
         </div>
       </section>
         </>
@@ -100,6 +150,12 @@ export default function Sidebar({
           <button type="button" onClick={onLogout}>로그아웃</button>
         </div>
       </footer>}
+      <button
+        className="sidebar-resize-handle"
+        type="button"
+        onPointerDown={onResizeStart}
+        aria-label="사이드바 너비 조절"
+      />
     </aside>
   );
 }

@@ -1,6 +1,6 @@
 .main-shell {
   display: grid;
-  grid-template-columns: 292px minmax(760px, 1fr) 328px;
+  grid-template-columns: var(--sidebar-width, 292px) minmax(620px, 1fr) 328px;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
@@ -8,7 +8,7 @@
 }
 
 .main-shell.is-right-collapsed {
-  grid-template-columns: 292px minmax(760px, 1fr) 0;
+  grid-template-columns: var(--sidebar-width, 292px) minmax(620px, 1fr) 0;
 }
 
 button {
@@ -37,11 +37,45 @@ button {
 
 .sidebar {
   position: relative;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   height: 100vh;
   background: #ffffff;
   border-right: 1px solid #dfe7f2;
+}
+
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  z-index: 40;
+  width: 10px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sidebar-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 4px;
+  width: 2px;
+  height: 100%;
+  background: transparent;
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.sidebar-resize-handle:hover::after,
+.is-resizing-sidebar .sidebar-resize-handle::after {
+  background: var(--color-purple-strong);
+  box-shadow: 0 0 0 3px rgba(105, 84, 255, 0.12);
+}
+
+.is-resizing-sidebar {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .is-right-collapsed .insights-panel {
@@ -276,45 +310,91 @@ button {
 
 .topic-tree {
   display: grid;
-  gap: 15px;
+  gap: 8px;
   color: #3f4a5c;
   font-size: 14px;
   font-weight: 760;
 }
 
-.tree-row,
-.tree-child {
+.tree-group {
+  min-width: 0;
+}
+
+.tree-node {
+  min-width: 0;
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 8px;
-  text-align: left;
+  gap: 4px;
+  border-radius: 10px;
+  color: #526074;
+}
+
+.tree-node.is-active {
+  color: var(--color-purple-strong);
+  background: #eef2ff;
+  font-weight: 850;
+}
+
+.tree-node.is-active .icon {
+  color: var(--color-purple-strong);
+}
+
+.tree-toggle {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  color: #8fa0b8;
+  font-size: 15px;
+  line-height: 1;
+  transition: transform 180ms ease;
+}
+
+.tree-toggle[aria-hidden="true"] {
+  pointer-events: none;
+}
+
+.tree-toggle.is-expanded {
+  transform: rotate(0deg);
+}
+
+.tree-toggle:not(.is-expanded) {
+  transform: rotate(-90deg);
 }
 
 .tree-row {
-  height: 24px;
+  min-width: 0;
+  width: 100%;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 2px;
+  text-align: left;
 }
 
-.tree-row .icon,
-.tree-child .icon {
+.tree-row .icon {
+  flex: 0 0 auto;
   width: 17px;
   height: 17px;
   color: #9bacbf;
 }
 
-.chevron {
-  width: 14px;
-  color: #8fa0b8;
-  font-size: 15px;
-  line-height: 1;
+.tree-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tree-children {
   position: relative;
   display: grid;
-  gap: 8px;
-  margin: 10px 0 0 12px;
-  padding-left: 31px;
+  gap: 7px;
+  margin: 5px 0 0 12px;
+  padding-left: 21px;
 }
 
 .tree-children::before {
@@ -325,25 +405,6 @@ button {
   bottom: -2px;
   width: 1px;
   background: #e7edf5;
-}
-
-.tree-child {
-  height: 34px;
-  padding: 0 10px;
-  border-radius: 10px;
-  color: #526074;
-  font-size: 14px;
-  font-weight: 720;
-}
-
-.tree-child.is-active {
-  color: var(--color-purple-strong);
-  background: #eef2ff;
-  font-weight: 850;
-}
-
-.tree-child.is-active .icon {
-  color: var(--color-purple-strong);
 }
 
 .user-footer {

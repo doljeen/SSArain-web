@@ -16,7 +16,10 @@ import { buildTopicTree, clone, flattenTopics, normalizeBrain, normalizeComments
 const CREATED_WORKSPACE_KEY = "ssarain-created-workspace";
 const AUTH_STATE_KEY = "ssarain-authenticated";
 const QUIZ_GENERATION_COUNTS_KEY = "ssarain-quiz-generation-counts";
+const SIDEBAR_WIDTH_KEY = "ssarain-sidebar-width";
 const QUIZ_GENERATION_LIMIT = 2;
+const MIN_SIDEBAR_WIDTH = 292;
+const MAX_SIDEBAR_WIDTH = 520;
 const MIN_GRAPH_SCALE = 0.72;
 const MAX_GRAPH_SCALE = 2.2;
 const MAX_GRAPH_PAN_X = 3200;
@@ -207,6 +210,10 @@ export default function MainPage() {
   // 현재 route와 좌우 패널, 보기 모드, 그래프 카메라 상태를 관리합니다.
   const [route, setRoute] = useState(getCurrentRoute);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const savedWidth = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+    return Number.isFinite(savedWidth) ? clamp(savedWidth, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH) : MIN_SIDEBAR_WIDTH;
+  });
   const [view, setView] = useState("synapse");
   const [graph, setGraph] = useState({ x: 0, y: 0, scale: 1, tilt: 0 });
   const [authStatus, setAuthStatus] = useState(() => sessionStorage.getItem(AUTH_STATE_KEY) === "true" ? "authenticated" : "guest");
@@ -249,6 +256,7 @@ export default function MainPage() {
   const panSession = useRef(null);
   const suppressNextClick = useRef(false);
   const flightTimer = useRef(null);
+  const sidebarResizeSession = useRef(null);
   const topicCatalogByBrain = useRef({});
   const commonTopicCatalog = useRef([]);
   const brainTabState = useRef({});
@@ -733,6 +741,34 @@ export default function MainPage() {
       loadTopicQuizzes(activeTopic);
     }
   }, [view, activeTopic?.id, activeTopic?.btid]);
+
+  // Topic 트리가 깊을 때 왼쪽 사이드바 폭을 사용자가 직접 조절할 수 있게 합니다.
+  useEffect(() => {
+    const handleSidebarResizeMove = (event) => {
+      if (!sidebarResizeSession.current) return;
+      const { startX, startWidth } = sidebarResizeSession.current;
+      const nextWidth = clamp(startWidth + event.clientX - startX, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH);
+      sidebarResizeSession.current.currentWidth = nextWidth;
+      setSidebarWidth(nextWidth);
+    };
+
+    const handleSidebarResizeEnd = () => {
+      if (!sidebarResizeSession.current) return;
+      const nextWidth = sidebarResizeSession.current.currentWidth || sidebarWidth;
+      sidebarResizeSession.current = null;
+      document.body.classList.remove("is-resizing-sidebar");
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(nextWidth));
+    };
+
+    window.addEventListener("pointermove", handleSidebarResizeMove);
+    window.addEventListener("pointerup", handleSidebarResizeEnd);
+
+    return () => {
+      window.removeEventListener("pointermove", handleSidebarResizeMove);
+      window.removeEventListener("pointerup", handleSidebarResizeEnd);
+      document.body.classList.remove("is-resizing-sidebar");
+    };
+  }, [sidebarWidth]);
 
   // 관리자/반장 권한이 아니거나 Brain을 벗어나면 관리모드는 자동으로 해제합니다.
   useEffect(() => {
@@ -1506,6 +1542,15 @@ export default function MainPage() {
     }
   };
 
+  const startSidebarResize = (event) => {
+    event.preventDefault();
+    sidebarResizeSession.current = {
+      startX: event.clientX,
+      startWidth: sidebarWidth
+    };
+    document.body.classList.add("is-resizing-sidebar");
+  };
+
   // WAS 로그아웃 후 게스트 메인 화면으로 전환합니다.
   const logout = async () => {
     try {
@@ -1526,7 +1571,7 @@ export default function MainPage() {
   };
 
   return (
-    <main className={`main-shell ${rightCollapsed ? "is-right-collapsed" : ""}`} aria-label="SSArain main page">
+    <main className={`main-shell ${rightCollapsed ? "is-right-collapsed" : ""}`} style={{ "--sidebar-width": `${sidebarWidth}px` }} aria-label="SSArain main page">
       {/* 왼쪽 Brain/Topic 탐색 영역입니다. */}
       <Sidebar
         activeBrain={activeBrain}
@@ -1539,6 +1584,7 @@ export default function MainPage() {
         onOpenModal={setModal}
         onLogout={logout}
         onRoute={handleRouteClick}
+        onResizeStart={startSidebarResize}
         onSelectBrain={selectBrain}
       />
 
