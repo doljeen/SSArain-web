@@ -204,6 +204,10 @@ export default function Workspace({
   const [postQuery, setPostQuery] = useState("");
   const hasActiveTopic = Boolean(activeTopic);
   const visibleRootTopics = pageData.topics || [];
+  const topicBreadcrumb = useMemo(
+    () => findTopicPath(visibleRootTopics, activeTopic?.id),
+    [visibleRootTopics, activeTopic?.id]
+  );
   const filteredNodes = useMemo(() => {
     const keyword = postQuery.trim().toLowerCase();
     if (!keyword) return pageData.nodes;
@@ -299,8 +303,20 @@ export default function Workspace({
       <header className="workspace-header">
         <nav className="breadcrumb" aria-label="현재 위치">
           {activeBrain && <button type="button" onClick={(event) => onRoute(event, `/brains/${activeBrain.id}`)}>{activeBrain.name}</button>}
-          {activeBrain && activeTopic && <span aria-hidden="true">›</span>}
-          {activeTopic && <button className="crumb-chip" type="button" onClick={(event) => onRoute(event, `/topics/${activeTopic.id}`)}>{activeTopic.name}</button>}
+          {activeBrain && topicBreadcrumb.length > 0 && <span aria-hidden="true">›</span>}
+          {topicBreadcrumb.map((topic, index) => (
+            <span className="breadcrumb-topic" key={topic.id}>
+              <button
+                className="crumb-chip"
+                type="button"
+                title={topic.name}
+                onClick={(event) => onMoveToTopic(event, topic.id)}
+              >
+                {topic.name}
+              </button>
+              {index < topicBreadcrumb.length - 1 && <span aria-hidden="true">›</span>}
+            </span>
+          ))}
         </nav>
         <div className="header-actions">
           {canManageWorkspace && (

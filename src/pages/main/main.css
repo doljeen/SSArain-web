@@ -595,6 +595,7 @@ button {
 }
 
 .workspace-header {
+  min-width: 0;
   height: 68px;
   padding: 0 24px;
   display: flex;
@@ -604,29 +605,53 @@ button {
 }
 
 .header-actions {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
 .breadcrumb {
+  min-width: 0;
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
   color: #718096;
   font-size: 13px;
   font-weight: 850;
+  scrollbar-width: none;
+}
+
+.breadcrumb::-webkit-scrollbar {
+  display: none;
 }
 
 .breadcrumb button {
+  flex: 0 0 auto;
   font-weight: inherit;
 }
 
+.breadcrumb-topic {
+  min-width: 0;
+  flex: 0 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .crumb-chip {
+  max-width: min(280px, 28vw);
   height: 34px;
   padding: 0 12px;
   display: inline-flex;
   align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   border-radius: 9px;
   background: #f3f6fb;
   color: #1f2937;
