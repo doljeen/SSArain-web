@@ -1766,6 +1766,8 @@ export default function MainPage() {
 
   const deleteComment = async (comment) => {
     if (!nodeDetail.data) return;
+    const shouldDelete = window.confirm("댓글을 삭제하시겠습니까?");
+    if (!shouldDelete) return;
 
     try {
       await apiDelete(endpoints.comments.remove(comment.id));

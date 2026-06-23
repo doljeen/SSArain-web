@@ -45,13 +45,53 @@ export const normalizeNodes = (nodes = []) => nodes.map((node) => ({
   recommends: node.recommends ?? node.likeCount ?? 0
 }));
 
-export const normalizeComments = (comments = []) => comments.filter(Boolean).map((comment) => ({
-  id: String(comment.cid),
-  parentId: comment.pid == null ? null : String(comment.pid),
-  writer: comment.writer || "작성자",
-  content: comment.content || "",
-  createdAt: comment.createdAt || ""
-}));
+const DELETED_COMMENT_MESSAGES = new Set([
+  "삭제된댓글입니다",
+  "삭제된댓글입니다."
+]);
+
+const pickCommentId = (comment) => comment.cid ?? comment.id;
+const pickCommentParentId = (comment) => comment.pid ?? comment.parentId;
+
+const isDeletedComment = (comment) => {
+  const compactContent = String(comment?.content || "").replace(/\s+/g, "");
+  return comment?.deleted === true
+    || comment?.isDeleted === true
+    || comment?.deletedAt != null
+    || DELETED_COMMENT_MESSAGES.has(compactContent);
+};
+
+export const normalizeComments = (comments = []) => {
+  const sourceComments = comments.filter(Boolean);
+  const deletedIds = new Set(
+    sourceComments
+      .filter(isDeletedComment)
+      .map((comment) => String(pickCommentId(comment)))
+  );
+
+  let hasNewDeletedChild = true;
+  while (hasNewDeletedChild) {
+    hasNewDeletedChild = false;
+    sourceComments.forEach((comment) => {
+      const commentId = String(pickCommentId(comment));
+      const parentId = pickCommentParentId(comment);
+      if (parentId != null && deletedIds.has(String(parentId)) && !deletedIds.has(commentId)) {
+        deletedIds.add(commentId);
+        hasNewDeletedChild = true;
+      }
+    });
+  }
+
+  return sourceComments
+    .filter((comment) => !deletedIds.has(String(pickCommentId(comment))))
+    .map((comment) => ({
+      id: String(pickCommentId(comment)),
+      parentId: pickCommentParentId(comment) == null ? null : String(pickCommentParentId(comment)),
+      writer: comment.writer || "작성자",
+      content: comment.content || "",
+      createdAt: comment.createdAt || ""
+    }));
+};
 
 export const normalizeNodeDetail = (node = {}) => ({
   id: String(node.nid),
