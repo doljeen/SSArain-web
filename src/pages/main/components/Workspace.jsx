@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import Icon from "../../../shared/icons/Icon.jsx";
 
 const lineStyle = (fromX, fromY, toX, toY) => {
@@ -55,7 +55,7 @@ const rectsOverlap = (first, second) => (
 
 const findOpenNeuronPosition = ({ topicNode, angle, radius, blockers, width, height }) => {
   const angleOffsets = [0, 0.28, -0.28, 0.56, -0.56, 0.84, -0.84, 1.12, -1.12, 1.4, -1.4, 1.68, -1.68];
-  const radiusOffsets = [0, 54, 108, 162, 216, 270];
+  const radiusOffsets = [0, 64, 128, 192, 256, 320];
 
   for (const radiusOffset of radiusOffsets) {
     for (const angleOffset of angleOffsets) {
@@ -71,8 +71,8 @@ const findOpenNeuronPosition = ({ topicNode, angle, radius, blockers, width, hei
   }
 
   return {
-    x: topicNode.x + (Math.cos(angle) * (radius + 154)),
-    y: topicNode.y + (Math.sin(angle) * (radius + 154))
+    x: topicNode.x + (Math.cos(angle) * (radius + 220)),
+    y: topicNode.y + (Math.sin(angle) * (radius + 220))
   };
 };
 
@@ -136,67 +136,74 @@ const collectTopicMap = (rootTopics, activeTopicId) => {
   return { rootNodes, descendantNodes, links, selectedTopic };
 };
 
-const TopicTreeGraph = ({ rootTopics, activeTopic, topicNodesById = {}, graphScale = 1, onMoveToTopic, onOpenNodeDetail }) => {
-  const { rootNodes, descendantNodes, links, selectedTopic } = collectTopicMap(rootTopics, activeTopic?.id);
-  const allTopicNodes = [...rootNodes, ...descendantNodes];
-  const shouldShowNeuronDetail = Number(graphScale || 1) >= 0.72;
-  const topicBlockers = allTopicNodes.map(topicBlockerForNode);
-  const positionedNeurons = [];
-  const placedExpandedNeuronBlockers = [];
+const TopicTreeGraphComponent = ({ rootTopics, activeTopic, topicNodesById = {}, showNeuronDetail, onMoveToTopic, onOpenNodeDetail }) => {
+  const { rootNodes, descendantNodes, links, selectedTopic } = useMemo(
+    () => collectTopicMap(rootTopics, activeTopic?.id),
+    [rootTopics, activeTopic?.id]
+  );
+  const allTopicNodes = useMemo(() => [...rootNodes, ...descendantNodes], [rootNodes, descendantNodes]);
+  const positionedNeurons = useMemo(() => {
+    const topicBlockers = allTopicNodes.map(topicBlockerForNode);
+    const nextPositionedNeurons = [];
+    const placedExpandedNeuronBlockers = [];
 
-  allTopicNodes.forEach((topicNode) => {
-    const topicNeurons = topicNodesById[String(topicNode.topic.id)] || [];
-    const neuronCount = topicNeurons.length;
-    const isSelectedTopic = selectedTopic && String(topicNode.topic.id) === String(selectedTopic.id);
-    const isExpanded = isSelectedTopic && shouldShowNeuronDetail;
-    const perRing = isExpanded ? 8 : 12;
-    const topicBlockersExceptSelf = topicBlockers.filter((blocker) => blocker.topicId !== String(topicNode.topic.id));
-    const cardWidth = isExpanded ? 168 : 62;
-    const cardHeight = isExpanded ? 92 : 62;
+    allTopicNodes.forEach((topicNode) => {
+      const topicNeurons = topicNodesById[String(topicNode.topic.id)] || [];
+      const neuronCount = topicNeurons.length;
+      const isSelectedTopic = selectedTopic && String(topicNode.topic.id) === String(selectedTopic.id);
+      const isExpanded = isSelectedTopic && showNeuronDetail;
+      const perRing = isExpanded ? 7 : 12;
+      const topicBlockersExceptSelf = topicBlockers.filter((blocker) => blocker.topicId !== String(topicNode.topic.id));
+      const cardWidth = isExpanded ? 178 : 58;
+      const cardHeight = isExpanded ? 100 : 58;
 
-    topicNeurons.forEach((node, index) => {
-      const ring = Math.floor(index / perRing);
-      const ringIndex = index % perRing;
-      const ringCount = Math.min(perRing, neuronCount - (ring * perRing));
-      const angleJitter = ((index % 5) - 2) * 0.08;
-      const radiusJitter = ((index % 4) - 1.5) * 14;
-      const angle = ((Math.PI * 2) / Math.max(ringCount, 1)) * ringIndex - (Math.PI / 2) + (ring * 0.31) + angleJitter;
-      const neuronRadius = (isExpanded ? 235 : 150) + (ring * (isExpanded ? 126 : 56)) + radiusJitter;
-      const position = findOpenNeuronPosition({
-        topicNode,
-        angle,
-        radius: neuronRadius,
-        blockers: isExpanded ? [...topicBlockersExceptSelf, ...placedExpandedNeuronBlockers] : topicBlockersExceptSelf,
-        width: cardWidth,
-        height: cardHeight
-      });
-      if (isExpanded) placedExpandedNeuronBlockers.push(rectForPoint(position.x, position.y, cardWidth + 18, cardHeight + 18));
+      topicNeurons.forEach((node, index) => {
+        const ring = Math.floor(index / perRing);
+        const ringIndex = index % perRing;
+        const ringCount = Math.min(perRing, neuronCount - (ring * perRing));
+        const angleJitter = ((index % 5) - 2) * 0.08;
+        const radiusJitter = ((index % 4) - 1.5) * 14;
+        const angle = ((Math.PI * 2) / Math.max(ringCount, 1)) * ringIndex - (Math.PI / 2) + (ring * 0.31) + angleJitter;
+        const neuronRadius = (isExpanded ? 260 : 138) + (ring * (isExpanded ? 148 : 52)) + radiusJitter;
+        const position = findOpenNeuronPosition({
+          topicNode,
+          angle,
+          radius: neuronRadius,
+          blockers: isExpanded ? [...topicBlockersExceptSelf, ...placedExpandedNeuronBlockers] : topicBlockersExceptSelf,
+          width: cardWidth,
+          height: cardHeight
+        });
+        if (isExpanded) placedExpandedNeuronBlockers.push(rectForPoint(position.x, position.y, cardWidth + 18, cardHeight + 18));
 
-      positionedNeurons.push({
-        node,
-        topicNode,
-        isExpanded,
-        x: position.x,
-        y: position.y
+        nextPositionedNeurons.push({
+          node,
+          topicNode,
+          isSelectedTopic,
+          isExpanded,
+          x: position.x,
+          y: position.y
+        });
       });
     });
-  });
+
+    return nextPositionedNeurons;
+  }, [allTopicNodes, selectedTopic, showNeuronDetail, topicNodesById]);
 
   if (!rootTopics.length) return null;
 
   return (
-    <div className={`topic-map ${shouldShowNeuronDetail ? "is-detail-zoom" : ""}`} aria-label="Topic synapse map">
+    <div className={`topic-map ${showNeuronDetail ? "is-detail-zoom" : ""}`} aria-label="Topic synapse map">
       {links.map((link) => (
         <span className="topic-map-link" key={`${link.from.topic.id}-${link.to.topic.id}`} style={lineStyle(link.from.x, link.from.y, link.to.x, link.to.y)} aria-hidden="true" />
       ))}
 
       {positionedNeurons.map((item) => (
-        <span className="neuron-map-link is-main" key={`neuron-link-${item.topicNode.topic.id}-${item.node.id}`} style={lineStyle(item.topicNode.x, item.topicNode.y, item.x, item.y)} aria-hidden="true" />
+        <span className={`neuron-map-link is-main ${item.isSelectedTopic ? "is-selected-topic" : "is-background"}`} key={`neuron-link-${item.topicNode.topic.id}-${item.node.id}`} style={lineStyle(item.topicNode.x, item.topicNode.y, item.x, item.y)} aria-hidden="true" />
       ))}
 
       {positionedNeurons.map((item) => (
         <button
-          className={`neuron-map-node is-main ${item.isExpanded ? "is-expanded" : ""}`}
+          className={`neuron-map-node is-main ${item.isSelectedTopic ? "is-selected-topic" : "is-background"} ${item.isExpanded ? "is-expanded" : ""}`}
           key={`${item.topicNode.topic.id}-${item.node.id}`}
           type="button"
           style={{ "--node-x": `${item.x}px`, "--node-y": `${item.y}px` }}
@@ -225,6 +232,13 @@ const TopicTreeGraph = ({ rootTopics, activeTopic, topicNodesById = {}, graphSca
     </div>
   );
 };
+
+const TopicTreeGraph = memo(TopicTreeGraphComponent, (prev, next) => (
+  prev.rootTopics === next.rootTopics
+  && String(prev.activeTopic?.id || "") === String(next.activeTopic?.id || "")
+  && prev.topicNodesById === next.topicNodesById
+  && prev.showNeuronDetail === next.showNeuronDetail
+));
 
 const formatDate = (value) => {
   if (!value) return "";
@@ -529,13 +543,13 @@ export default function Workspace({
       ) : (
         // 그래프 패널입니다. Pointer/Wheel 이벤트는 MainPage에서 받아 카메라 상태를 바꿉니다.
         <div ref={graphFieldRef} className={graphClassName} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onWheel={onWheel}>
-          {view === "synapse" && hasActiveTopic ? (
+          {view === "synapse" && activeBrain ? (
           <>
             {/* CSS 변수로 pan/zoom/tilt 값을 내려서 Prezi식 이동을 표현합니다. */}
             <div className="graph-viewport" style={{ "--pan-x": `${graph.x}px`, "--pan-y": `${graph.y}px`, "--zoom": graph.scale, "--tilt": `${graph.tilt || 0}deg` }}>
-              <TopicTreeGraph rootTopics={visibleRootTopics} activeTopic={activeTopic} topicNodesById={pageData.topicNodesById || {}} graphScale={graph.scale} onMoveToTopic={onMoveToTopic} onOpenNodeDetail={onOpenNodeDetail} />
+              <TopicTreeGraph rootTopics={visibleRootTopics} activeTopic={activeTopic} topicNodesById={pageData.topicNodesById || {}} showNeuronDetail={Number(graph.scale || 1) >= 0.88} onMoveToTopic={onMoveToTopic} onOpenNodeDetail={onOpenNodeDetail} />
             </div>
-            {canGenerateQuiz && (
+            {hasActiveTopic && canGenerateQuiz && (
               <div className="quiz-manage-panel" aria-live="polite">
                 <button className="quiz-manage-create" type="button" onClick={onGenerateQuiz} disabled={quizState.isGenerating || quizLimitReached}>
                   <Icon name="file" />
@@ -549,10 +563,12 @@ export default function Workspace({
                 )}
               </div>
             )}
-            <button className="quiz-floating-cta" type="button" onClick={onOpenQuiz}>
-              <Icon name="file" />
-              <span>퀴즈를 확인해보세요</span>
-            </button>
+            {hasActiveTopic && (
+              <button className="quiz-floating-cta" type="button" onClick={onOpenQuiz}>
+                <Icon name="file" />
+                <span>퀴즈를 확인해보세요</span>
+              </button>
+            )}
             {/* 그래프 확대/축소와 위치 초기화 컨트롤입니다. */}
             <div className="zoom-controls" aria-label="그래프 확대 축소">
               <button type="button" onClick={() => onZoom(graph.scale / 1.15, window.innerWidth / 2, window.innerHeight / 2)} aria-label="축소">-</button>

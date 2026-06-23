@@ -719,9 +719,14 @@ export default function MainPage() {
       const visibleTopics = visibleTopicTree(topics);
       const flatTopics = flattenTopics(visibleTopics);
       const cachedState = brainTabState.current[String(brainId)];
-      const preferredTopicId = requestedTopicId || cachedState?.activeTopicId || null;
-      const selectedTopic = flatTopics.find((topic) => String(topic.id) === String(preferredTopicId)) || flatTopics[0] || null;
-      const nextView = options.view || cachedState?.view || view;
+      const hasRequestedTopic = requestedTopicId != null && requestedTopicId !== "";
+      const preferredTopicId = hasRequestedTopic
+        ? requestedTopicId
+        : (options.useCachedTopic ? cachedState?.activeTopicId || null : null);
+      const selectedTopic = preferredTopicId
+        ? flatTopics.find((topic) => String(topic.id) === String(preferredTopicId)) || null
+        : null;
+      const nextView = selectedTopic ? options.view || cachedState?.view || view : "synapse";
       const topicNodesById = await fetchVisibleTopicNodePreviews(brainId, visibleTopics);
       if (requestId !== workspaceLoadSeq.current) return;
 
@@ -799,7 +804,9 @@ export default function MainPage() {
         const flatTopics = flattenTopics(visibleTopics);
       const routedTopicId = getTopicIdFromRoute(route);
       const routedNodeId = getNodeIdFromRoute(route);
-      const selectedTopic = flatTopics.find((topic) => String(topic.id) === String(routedTopicId)) || flatTopics[0] || null;
+      const selectedTopic = routedTopicId
+        ? flatTopics.find((topic) => String(topic.id) === String(routedTopicId)) || null
+        : null;
       activeTopicId = selectedTopic ? String(selectedTopic.id) : null;
       topicNodesById = await fetchVisibleTopicNodePreviews(selectedBrain.id, visibleTopics);
       if (requestId !== workspaceLoadSeq.current) return;
@@ -919,10 +926,12 @@ export default function MainPage() {
       } else {
         setNodeDetail((current) => current.isOpen ? { isOpen: false, isLoading: false, data: null, status: "", liked: false } : current);
       }
-      if (routedTopicId) {
+      if (routedBrainId && !routedTopicId && !isBrainSearchRoute(nextRoute)) {
+        setPageData((current) => ({ ...current, activeTopicId: null, nodes: [] }));
+      } else if (routedTopicId) {
         setPageData((current) => ({ ...current, activeTopicId: routedTopicId }));
       }
-      if (routedBrainId && event?.type === "popstate") {
+      if (routedBrainId && event?.type === "popstate" && !isBrainSearchRoute(nextRoute)) {
         loadBrainWorkspace(routedBrainId, routedTopicId, { view: nextView });
       }
       if (isBrainSearchRoute(nextRoute)) {
@@ -1020,6 +1029,13 @@ export default function MainPage() {
       tilt: 0
     }));
   };
+
+  useEffect(() => {
+    if (view !== "synapse" || !activeBrain || activeTopic || !topicLayoutPoints.length) return;
+    window.requestAnimationFrame(() => {
+      fitGraphToTopics();
+    });
+  }, [activeBrain?.id, activeTopic?.id, topicLayoutPoints, view]);
 
   // 현재 Topic/User 정보에 따라 모달 문구와 연결 엔드포인트를 생성합니다.
   const modalCopy = useMemo(() => createModalCopy({
@@ -1367,7 +1383,7 @@ export default function MainPage() {
     }
 
     const targetPoint = topicLayoutPoints.find((point) => String(point.topic.id) === String(topicId));
-    if (targetPoint) focusGraphPoint(targetPoint.x, targetPoint.y, 1.35);
+    if (targetPoint) focusGraphPoint(targetPoint.x, targetPoint.y, 0.88);
 
     setView("synapse");
     setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
@@ -1655,7 +1671,7 @@ export default function MainPage() {
   // 그래프 빈 영역을 누르면 pan 시작 정보를 저장합니다.
   const handlePointerDown = (event) => {
     if (event.button !== 0) return;
-    if (view !== "synapse" || !activeTopic || modal) return;
+    if (view !== "synapse" || !activeBrain || modal) return;
     if (event.target instanceof Element && event.target.closest("button, a, input, textarea, select")) return;
 
     panSession.current = {
@@ -1708,7 +1724,7 @@ export default function MainPage() {
 
   // 휠 스크롤로 그래프를 확대/축소합니다.
   const handleWheel = (event) => {
-    if (view !== "synapse" || !activeTopic) return;
+    if (view !== "synapse" || !activeBrain) return;
 
     event.preventDefault();
     event.stopPropagation();

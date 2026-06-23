@@ -762,7 +762,7 @@ button {
   inset: 0;
   transform: translate(var(--pan-x), var(--pan-y)) scale(var(--zoom)) rotate(var(--tilt, 0deg));
   transform-origin: 50% 54%;
-  transition: transform 420ms cubic-bezier(0.19, 1, 0.22, 1);
+  transition: none;
   will-change: transform;
 }
 
@@ -899,6 +899,14 @@ button {
   opacity: 0.65;
 }
 
+.neuron-map-link.is-main.is-background {
+  opacity: 0.22;
+}
+
+.neuron-map-link.is-main.is-selected-topic {
+  opacity: 0.74;
+}
+
 .neuron-map-node {
   position: absolute;
   left: 50%;
@@ -926,8 +934,8 @@ button {
 }
 
 .neuron-map-node.is-main {
-  width: 38px;
-  min-height: 38px;
+  width: 34px;
+  min-height: 34px;
   padding: 0;
   place-items: center;
   gap: 0;
@@ -944,6 +952,17 @@ button {
   z-index: 6;
 }
 
+.neuron-map-node.is-main.is-background {
+  border-color: #e7edff;
+  opacity: 0.66;
+  box-shadow: 0 8px 18px rgba(37, 50, 70, 0.06);
+}
+
+.neuron-map-node.is-main.is-selected-topic {
+  border-color: #cfd9ff;
+  opacity: 1;
+}
+
 .neuron-map-node.is-main.is-expanded {
   z-index: 18;
 }
@@ -952,8 +971,8 @@ button {
 .neuron-map-node.is-main:hover,
 .neuron-map-node.is-main:focus-visible {
   width: 126px;
-  min-height: 54px;
-  padding: 8px 11px;
+  min-height: 62px;
+  padding: 9px 12px;
   place-items: start center;
   gap: 4px;
   border-radius: 16px;
@@ -961,12 +980,13 @@ button {
 
 .neuron-map-node.is-main:hover {
   transform: translate(calc(var(--node-x) - 50%), calc(var(--node-y) - 50%)) scale(1.04);
+  opacity: 1;
   z-index: 80;
 }
 
 .neuron-map-icon {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
   border-radius: 10px;
@@ -975,8 +995,8 @@ button {
 }
 
 .neuron-map-icon .icon {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
 }
 
 .neuron-map-node strong {
@@ -1003,6 +1023,10 @@ button {
   width: 100%;
   height: auto;
   opacity: 1;
+  display: -webkit-box;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .neuron-map-node small {
