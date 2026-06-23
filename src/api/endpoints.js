@@ -37,6 +37,7 @@ export const endpoints = {
     create: "/brains",
     info: (brainId) => `/brains/${brainId}`,
     update: (brainId) => `/brains/${brainId}`,
+    remove: (brainId) => `/brains/${brainId}`,
     join: (brainId) => `/brains/${brainId}/join`,
     addUsers: (brainId) => `/brains/${brainId}/users`,
     removeUsers: (brainId) => `/brains/${brainId}/users`,
@@ -44,6 +45,7 @@ export const endpoints = {
     joinRequests: (brainId, page = 0, size = 9) => `/brains/${brainId}/join-requests?${query({ page, size })}`,
     manageJoin: (brainId) => `/brains/${brainId}/join-manage`,
     members: (brainId, page = 0, size = 9) => `/brains/${brainId}/users?${query({ page, size })}`,
+    changeUserRole: (brainId, userId) => `/brains/${brainId}/users/${userId}/role`,
     registerTopics: (brainId) => `/brains/${brainId}/topics`,
     topics: (brainId) => `/brains/${brainId}/topics`,
     topicDetail: (brainId, topicId) => `/brains/${brainId}/topics/${topicId}`
@@ -98,6 +100,7 @@ export const endpointMeta = {
     list: { code: "B05", method: "GET" },
     create: { code: "B06", method: "POST" },
     update: { code: "B07", method: "PATCH" },
+    remove: { code: "B08", method: "DELETE" },
     nameCheck: { code: "B13", method: "GET" },
     join: { code: "B01", method: "POST" },
     addUsers: { code: "B02", method: "POST" },
@@ -109,7 +112,8 @@ export const endpointMeta = {
     topics: { code: "B10", method: "GET" },
     topicDetail: { code: "B16", method: "GET" },
     members: { code: "B17", method: "GET" },
-    info: { code: "B18", method: "GET" }
+    info: { code: "B18", method: "GET" },
+    changeUserRole: { code: "B19", method: "PATCH" }
   },
   topics: {
     list: { code: "T01", method: "GET" },

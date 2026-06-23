@@ -123,7 +123,7 @@ const TopicTreeGraph = ({ rootTopics, activeTopic, topicNodesById = {}, graphSca
           key={`${item.topicNode.topic.id}-${item.node.id}`}
           type="button"
           style={{ "--node-x": `${item.x}px`, "--node-y": `${item.y}px` }}
-          onClick={(event) => onOpenNodeDetail(event, item.node.id)}
+          onClick={(event) => onOpenNodeDetail(event, item.node.id, item.topicNode.topic.id)}
         >
           <span className="neuron-map-icon"><Icon name="file" /></span>
           <strong>{item.node.title || "제목 없는 Neuron"}</strong>
@@ -240,6 +240,7 @@ export default function Workspace({
   onToggleRight
 }) {
   const [postQuery, setPostQuery] = useState("");
+  const [postSort, setPostSort] = useState("latest");
   const hasActiveTopic = Boolean(activeTopic);
   const visibleRootTopics = pageData.topics || [];
   const topicBreadcrumb = useMemo(
@@ -248,13 +249,21 @@ export default function Workspace({
   );
   const filteredNodes = useMemo(() => {
     const keyword = postQuery.trim().toLowerCase();
-    if (!keyword) return pageData.nodes;
-    return pageData.nodes.filter((node) => (
+    const matchedNodes = keyword ? pageData.nodes.filter((node) => (
       node.title?.toLowerCase().includes(keyword)
       || node.content?.toLowerCase().includes(keyword)
       || node.writer?.toLowerCase().includes(keyword)
-    ));
-  }, [pageData.nodes, postQuery]);
+    )) : pageData.nodes;
+
+    return [...matchedNodes].sort((firstNode, secondNode) => {
+      if (postSort === "popular") {
+        const recommendGap = Number(secondNode.recommends || 0) - Number(firstNode.recommends || 0);
+        if (recommendGap !== 0) return recommendGap;
+      }
+
+      return new Date(secondNode.createdAt || 0).getTime() - new Date(firstNode.createdAt || 0).getTime();
+    });
+  }, [pageData.nodes, postQuery, postSort]);
   const commentTree = useMemo(() => buildCommentTree(nodeDetail?.data?.comments || []), [nodeDetail?.data?.comments]);
   const activeCommentTarget = useMemo(() => {
     if (!nodeDetail?.data || (!commentDraft.parentId && !commentDraft.editingId)) return null;
@@ -264,6 +273,9 @@ export default function Workspace({
   const currentUserName = pageData.user?.name || "";
   const canModerateComments = canManageWorkspace;
   const canGenerateQuiz = canManageWorkspace && manageMode;
+  const buildTopicRoute = (topicId, routeView = "synapse") => (
+    activeBrain?.id && topicId ? `/brains/${activeBrain.id}/topics/${topicId}/${routeView}` : `/topics/${topicId}/${routeView}`
+  );
   const quizLimitReached = Number(quizGenerationCount || 0) >= Number(quizGenerationLimit || 2);
   const quizScore = useMemo(() => {
     if (!quizState?.quizzes?.length) return { correct: 0, total: 0 };
@@ -363,8 +375,8 @@ export default function Workspace({
             </button>
           )}
           <div className="view-tabs" role="tablist" aria-label="보기 전환">
-            <button className={`view-tab ${view === "synapse" ? "is-active" : ""}`} type="button" role="tab" aria-selected={view === "synapse"} onClick={(event) => { onRoute(event, activeTopic ? `/topics/${activeTopic.id}/synapse` : "/main/synapse"); onSetView("synapse"); }}><Icon name="synapse" /><span>Synapse View</span></button>
-            <button className={`view-tab ${view === "posts" ? "is-active" : ""}`} type="button" role="tab" aria-selected={view === "posts"} onClick={(event) => { onRoute(event, activeTopic ? `/topics/${activeTopic.id}/posts` : "/main/posts"); onSetView("posts"); }}><Icon name="list" /><span>Post List</span></button>
+            <button className={`view-tab ${view === "synapse" ? "is-active" : ""}`} type="button" role="tab" aria-selected={view === "synapse"} onClick={(event) => { onRoute(event, activeTopic ? buildTopicRoute(activeTopic.id, "synapse") : "/main/synapse"); onSetView("synapse"); }}><Icon name="synapse" /><span>Synapse View</span></button>
+            <button className={`view-tab ${view === "posts" ? "is-active" : ""}`} type="button" role="tab" aria-selected={view === "posts"} onClick={(event) => { onRoute(event, activeTopic ? buildTopicRoute(activeTopic.id, "posts") : "/main/posts"); onSetView("posts"); }}><Icon name="list" /><span>Post List</span></button>
           </div>
           <button className="header-button" type="button" onClick={(event) => onRoute(event, isAuthenticated ? "/mypage" : "/login")}>{isAuthenticated ? "마이페이지" : "로그인"}</button>
           <button className={`header-button notice-trigger ${isRightPanelOpen ? "is-open" : ""}`} type="button" onClick={(event) => { onRoute(event, "/notifications"); onToggleRight(); }} aria-pressed={isRightPanelOpen}><Icon name="bell" /><span>알림창</span></button>
@@ -480,7 +492,7 @@ export default function Workspace({
                 <span>Topic 기반으로 생성된 문제를 풀어보세요.</span>
               </div>
               <div className="quiz-header-actions">
-                <button className="quiz-back-button" type="button" onClick={(event) => { onRoute(event, activeTopic ? `/topics/${activeTopic.id}/synapse` : "/main/synapse"); onSetView("synapse"); }}>
+                <button className="quiz-back-button" type="button" onClick={(event) => { onRoute(event, activeTopic ? buildTopicRoute(activeTopic.id, "synapse") : "/main/synapse"); onSetView("synapse"); }}>
                   Synapse로 돌아가기
                 </button>
               </div>
@@ -635,6 +647,22 @@ export default function Workspace({
                 <h1>{activeTopic.name}</h1>
               </div>
               <div className="post-list-tools">
+                <div className="post-sort-toggle" role="group" aria-label="Neuron 정렬">
+                  <button
+                    className={postSort === "latest" ? "is-active" : ""}
+                    type="button"
+                    onClick={() => setPostSort("latest")}
+                  >
+                    최신순
+                  </button>
+                  <button
+                    className={postSort === "popular" ? "is-active" : ""}
+                    type="button"
+                    onClick={() => setPostSort((current) => current === "popular" ? "latest" : "popular")}
+                  >
+                    인기순
+                  </button>
+                </div>
                 <label className="post-search">
                   <Icon name="search" />
                   <input type="search" value={postQuery} onChange={(event) => setPostQuery(event.target.value)} placeholder="Neuron 검색" />
@@ -648,7 +676,7 @@ export default function Workspace({
 
             <div className="post-card-list">
               {filteredNodes.map((node) => (
-                <button className="post-card" type="button" key={node.id} onClick={(event) => onOpenNodeDetail(event, node.id)}>
+                <button className="post-card" type="button" key={node.id} onClick={(event) => onOpenNodeDetail(event, node.id, activeTopic.id)}>
                   <span className="post-topic"><Icon name="folder" />{activeTopic.name}</span>
                   <span className="post-card-body">
                     <strong>{node.title}</strong>
@@ -657,6 +685,7 @@ export default function Workspace({
                   <span className="post-card-meta">
                     <span className="post-author"><Icon name="user" />{node.writer || pageData.user.name || "작성자"}</span>
                     {node.createdAt && <span><Icon name="clock" />{formatDate(node.createdAt)}</span>}
+                    <span><Icon name="plus" />추천 {node.recommends || 0}</span>
                     <span><Icon name="bell" />댓글 {node.comments || 0}</span>
                   </span>
                 </button>

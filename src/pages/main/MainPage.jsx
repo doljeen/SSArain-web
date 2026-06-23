@@ -69,12 +69,12 @@ const clampGraph = (graphState) => ({
 });
 
 const getTopicIdFromRoute = (path) => {
-  const match = path.match(/^\/topics\/([^/]+)/);
+  const match = path.match(/^\/brains\/[^/]+\/topics\/([^/]+)/) || path.match(/^\/topics\/([^/]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 };
 
 const getNodeIdFromRoute = (path) => {
-  const match = path.match(/^\/nodes\/([^/]+)/);
+  const match = path.match(/^\/brains\/[^/]+\/topics\/[^/]+\/nodes\/([^/]+)/) || path.match(/^\/nodes\/([^/]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 };
 
@@ -84,8 +84,15 @@ const getBrainIdFromRoute = (path) => {
 };
 
 const isBrainSearchRoute = (path) => path === "/brains/search";
-const getViewFromRoute = (path) => path.includes("/quiz") ? "quiz" : path.includes("/posts") || path.startsWith("/nodes/") ? "posts" : "synapse";
+const getViewFromRoute = (path) => path.includes("/quiz") ? "quiz" : path.includes("/posts") || path.includes("/nodes/") ? "posts" : "synapse";
+const buildTopicRoute = (brainId, topicId, routeView = "synapse") => (
+  brainId && topicId ? `/brains/${brainId}/topics/${topicId}/${routeView}` : `/topics/${topicId}/${routeView}`
+);
+const buildNodeRoute = (brainId, topicId, nodeId) => (
+  brainId && topicId ? `/brains/${brainId}/topics/${topicId}/nodes/${nodeId}` : `/nodes/${nodeId}`
+);
 const normalizeRoleValue = (role) => String(role || "").trim().toUpperCase();
+const ROLE_LABELS = { USER: "일반학생", MANAGER: "반장", ADMIN: "관리자" };
 const MANAGE_ROLE_NAMES = ["ADMIN", "MANAGER"];
 const ADMIN_ROLE_NAMES = ["ADMIN"];
 const canUseManageMode = (role) => MANAGE_ROLE_NAMES.includes(normalizeRoleValue(role));
@@ -126,13 +133,53 @@ const mergeBrainPreservingRole = (brain, incoming) => {
   return { ...brain, ...incoming, role, brainRole: role };
 };
 const isTopicUsing = (value) => value === true || value === "true" || value === 1 || value === "1";
-const normalizeBrainUser = (user = {}) => ({
-  id: String(user.UUID || user.uuid || user.uid || user.id || ""),
-  name: user.name || "사용자",
-  email: user.email || ""
-});
+const pickBrainUserRole = (source = {}) => {
+  const role =
+    source.brainRole ??
+    source.role ??
+    source.memberRole ??
+    source.roleInBrain ??
+    source.brainMemberRole ??
+    source.authority;
 
-const normalizeBrainUserPage = (page = {}) => (page.users || []).map(normalizeBrainUser).filter((user) => user.id);
+  if (role && typeof role === "object") {
+    return role.name ?? role.role ?? role.value ?? role.code ?? "";
+  }
+
+  return role;
+};
+const normalizeBrainUser = (user = {}, fallbackRole = "") => {
+  const role = normalizeRoleValue(pickBrainUserRole(user) || fallbackRole || "USER");
+
+  return {
+    id: String(user.UUID || user.uuid || user.uid || user.id || user.userId || user.memberId || ""),
+    name: user.name || user.nickname || user.userName || "사용자",
+    email: user.email || user.userEmail || "",
+    role,
+    brainRole: role
+  };
+};
+
+const normalizeBrainUserPage = (page = {}, roleFallbackUsers = []) => {
+  const users = page.users || page.content || page.members || page.data || [];
+  const roleById = new Map(roleFallbackUsers.map((user) => [String(user.id), user.brainRole || user.role]).filter(([id, role]) => id && role));
+  const roleByEmail = new Map(roleFallbackUsers.map((user) => [
+    String(user.email || "").trim().toLowerCase(),
+    user.brainRole || user.role
+  ]).filter(([email, role]) => email && role));
+
+  return (Array.isArray(users) ? users : []).map((user) => {
+    const id = String(user.UUID || user.uuid || user.uid || user.id || user.userId || user.memberId || "");
+    const email = String(user.email || user.userEmail || "").trim().toLowerCase();
+    return normalizeBrainUser(user, roleById.get(id) || roleByEmail.get(email));
+  }).filter((user) => user.id);
+};
+const updateBrainUserRole = (users, userId, role) => users.map((user) => (
+  String(user.id) === String(userId)
+    ? { ...user, role, brainRole: role }
+    : user
+));
+const formatBrainRole = (role) => ROLE_LABELS[normalizeRoleValue(role)] || role || "일반학생";
 const rootScatterPositions = [
   { x: -900, y: -360 },
   { x: 920, y: 360 },
@@ -386,8 +433,8 @@ export default function MainPage() {
     const cachedTopicId = cachedState?.activeTopicId;
     const cachedView = cachedState?.view || "synapse";
     if (!cachedTopicId) return `/brains/${brainId}`;
-    const suffix = cachedView === "posts" ? "/posts" : cachedView === "quiz" ? "/quiz" : "/synapse";
-    return `/topics/${cachedTopicId}${suffix}`;
+    const routeView = cachedView === "posts" ? "posts" : cachedView === "quiz" ? "quiz" : "synapse";
+    return buildTopicRoute(brainId, cachedTopicId, routeView);
   };
 
   const rememberActiveBrainState = () => {
@@ -610,7 +657,7 @@ export default function MainPage() {
 
     setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
     setView("quiz");
-    handleRouteClick(event, `/topics/${activeTopic.id}/quiz`);
+    handleRouteClick(event, buildTopicRoute(activeBrain?.id, activeTopic.id, "quiz"));
     loadTopicQuizzes(activeTopic);
   };
 
@@ -858,11 +905,13 @@ export default function MainPage() {
     }
 
     // 브라우저 뒤로가기/앞으로가기나 버튼 클릭으로 route가 바뀌는 경우를 감지합니다.
-    const onRouteChange = () => {
+    const onRouteChange = (event) => {
       const nextRoute = getCurrentRoute();
       setRoute(nextRoute);
       syncDocumentRoute(nextRoute);
-      setView(getViewFromRoute(nextRoute));
+      const nextView = getViewFromRoute(nextRoute);
+      setView(nextView);
+      const routedBrainId = getBrainIdFromRoute(nextRoute);
       const routedTopicId = getTopicIdFromRoute(nextRoute);
       const routedNodeId = getNodeIdFromRoute(nextRoute);
       if (routedNodeId) {
@@ -872,6 +921,9 @@ export default function MainPage() {
       }
       if (routedTopicId) {
         setPageData((current) => ({ ...current, activeTopicId: routedTopicId }));
+      }
+      if (routedBrainId && event?.type === "popstate") {
+        loadBrainWorkspace(routedBrainId, routedTopicId, { view: nextView });
       }
       if (isBrainSearchRoute(nextRoute)) {
         searchBrains("", 0);
@@ -1139,8 +1191,9 @@ export default function MainPage() {
       setNodeDetail({ isOpen: true, isLoading: false, data: normalizeNodeDetail(created), status: "", liked: false });
       closeNodeCreateModal();
       setView("posts");
-      routeTo(`/nodes/${created.nid || nextNode.id}`);
-      setRoute(`/nodes/${created.nid || nextNode.id}`);
+      const nextRoute = buildNodeRoute(activeBrain?.id, activeTopic?.id, created.nid || nextNode.id);
+      routeTo(nextRoute);
+      setRoute(nextRoute);
       showToast(`${created.title || title} Neuron 작성 완료`);
     } catch (error) {
       setNodeDraft((current) => ({ ...current, isSubmitting: false, status: `Neuron 작성 실패 · ${normalizeErrorMessage(error.message)}` }));
@@ -1297,7 +1350,7 @@ export default function MainPage() {
         activeTopicId: String(topicId),
         nodes: current.topicNodesById?.[String(topicId)] || []
       }));
-      if (shouldUpdateRoute) handleRouteClick(event, `/topics/${topicId}/posts`);
+      if (shouldUpdateRoute) handleRouteClick(event, buildTopicRoute(activeBrain?.id, topicId, "posts"));
       if (activeBrain) {
         fetchTopicNodes(activeBrain.id, selectedTopic).then((nodes) => {
           setPageData((current) => String(current.activeTopicId) === String(topicId) ? {
@@ -1332,16 +1385,19 @@ export default function MainPage() {
         }));
       });
     }
-    if (shouldUpdateRoute) handleRouteClick(event, `/topics/${topicId}/synapse`);
+    if (shouldUpdateRoute) handleRouteClick(event, buildTopicRoute(activeBrain?.id, topicId, "synapse"));
   };
 
-  const openNodeDetail = (event, nodeId) => {
-    handleRouteClick(event, `/nodes/${nodeId}`);
+  const openNodeDetail = (event, nodeId, topicId = activeTopic?.id) => {
+    if (topicId) {
+      setPageData((current) => ({ ...current, activeTopicId: String(topicId) }));
+    }
+    handleRouteClick(event, buildNodeRoute(activeBrain?.id, topicId, nodeId));
     loadNodeDetail(nodeId);
   };
 
   const closeNodeDetail = (event) => {
-    const nextRoute = activeTopic ? `/topics/${activeTopic.id}/posts` : "/main/posts";
+    const nextRoute = activeTopic ? buildTopicRoute(activeBrain?.id, activeTopic.id, "posts") : "/main/posts";
     setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
     setCommentDraft({ content: "", status: "", isSubmitting: false, parentId: null, editingId: null });
     setView("posts");
@@ -1361,7 +1417,7 @@ export default function MainPage() {
 
     try {
       await apiDelete(endpoints.nodes.remove(nodeId));
-      const nextRoute = activeTopic ? `/topics/${activeTopic.id}/posts` : "/main/posts";
+      const nextRoute = activeTopic ? buildTopicRoute(activeBrain?.id, activeTopic.id, "posts") : "/main/posts";
       setPageData((current) => ({
         ...current,
         nodes: current.nodes.filter((node) => String(node.id) !== String(nodeId)),
@@ -1472,7 +1528,8 @@ export default function MainPage() {
           node: nodeTitle,
           author,
           type: "comment",
-          createdAt: comment?.createdAt || now
+          createdAt: comment?.createdAt || now,
+          route: buildNodeRoute(activeBrain?.id, activeTopic?.id, nodeId)
         },
         ...(current.notifications || [])
       ].slice(0, 6),
@@ -1483,7 +1540,7 @@ export default function MainPage() {
           user: author,
           text: `${nodeTitle}에 ${isReply ? "답글" : "댓글"}을 작성했습니다.`,
           time: "방금 전",
-          route: `/nodes/${nodeId}`,
+          route: buildNodeRoute(activeBrain?.id, activeTopic?.id, nodeId),
           preview: content
         },
         ...(current.activities || [])
@@ -1746,6 +1803,11 @@ export default function MainPage() {
       .map((result) => result.reason?.message)
       .filter(Boolean);
     const brainInfo = infoResult.status === "fulfilled" ? normalizeBrain(infoResult.value) : null;
+    const currentUserRoleFallback = {
+      id: "",
+      email: pageData.user?.email || "",
+      role: activeBrain?.brainRole || activeBrain?.role || brainManager.brain?.brainRole || brainManager.brain?.role
+    };
 
     setBrainManager((current) => ({
       ...current,
@@ -1756,11 +1818,38 @@ export default function MainPage() {
         description: brainInfo.description || "",
         joinPolicy: brainInfo.joinPolicy || "PROTECTED"
       } : current.form,
-      members: membersResult.status === "fulfilled" ? normalizeBrainUserPage(membersResult.value) : current.members,
+      members: membersResult.status === "fulfilled"
+        ? normalizeBrainUserPage(membersResult.value, [...current.members, currentUserRoleFallback])
+        : current.members,
       availableUsers: availableResult.status === "fulfilled" ? normalizeBrainUserPage(availableResult.value) : current.availableUsers,
       joinRequests: requestsResult.status === "fulfilled" ? normalizeBrainUserPage(requestsResult.value) : current.joinRequests,
       message: failed.length ? `일부 정보를 불러오지 못했습니다 · ${failed[0]}` : ""
     }));
+  };
+
+  const changeBrainMemberRole = async (member, role) => {
+    if (!brainManager.brain) return;
+    const nextRole = normalizeRoleValue(role);
+
+    try {
+      await apiPatch(endpoints.brains.changeUserRole(brainManager.brain.id, member.id), {
+        role: nextRole
+      });
+
+      setBrainManager((current) => ({
+        ...current,
+        members: updateBrainUserRole(current.members, member.id, nextRole),
+        message: `${member.name} 권한이 변경되었습니다.`
+      }));
+      showToast(`${member.name} 권한 변경 완료`);
+      await loadBrainManagerData(brainManager.brain.id, brainManager.searchKeyword);
+      await loadMainData();
+    } catch (error) {
+      setBrainManager((current) => ({
+        ...current,
+        message: `권한 변경 실패 · ${error.message}`
+      }));
+    }
   };
 
   const openBrainManager = async (event, brainId) => {
@@ -1920,6 +2009,45 @@ export default function MainPage() {
     }
   };
 
+  const deleteBrain = async () => {
+    if (!brainManager.brain) return;
+
+    const brainId = String(brainManager.brain.id);
+    const brainName = brainManager.brain.name || "Brain";
+    const wasActiveBrain = String(pageData.activeBrainId) === brainId;
+    const confirmed = window.confirm(`${brainName} Brain을 삭제할까요? 삭제 후에는 되돌릴 수 없습니다.`);
+    if (!confirmed) return;
+
+    try {
+      setBrainManager((current) => ({ ...current, isDeleting: true, message: "" }));
+      await apiDelete(endpoints.brains.remove(brainId));
+
+      delete brainTabState.current[brainId];
+      setOpenBrainTabs((current) => current.filter((brain) => String(brain.id) !== brainId));
+      setPageData((current) => ({
+        ...current,
+        activeBrainId: wasActiveBrain ? null : current.activeBrainId,
+        activeTopicId: wasActiveBrain ? null : current.activeTopicId,
+        brains: current.brains.filter((brain) => String(brain.id) !== brainId),
+        topics: wasActiveBrain ? [] : current.topics,
+        nodes: wasActiveBrain ? [] : current.nodes,
+        topicNodesById: wasActiveBrain ? {} : current.topicNodesById
+      }));
+      setTopicCatalog((current) => (wasActiveBrain ? [] : current));
+      setBrainManager(emptyBrainManager);
+      setView("synapse");
+      setRoute("/main");
+      routeTo("/main");
+      showToast(`${brainName} Brain 삭제 완료`);
+    } catch (error) {
+      setBrainManager((current) => ({
+        ...current,
+        isDeleting: false,
+        message: `Brain 삭제 실패 · ${error.message}`
+      }));
+    }
+  };
+
   // Brain 검색 화면에서 가입 버튼을 누르면 PUBLIC은 즉시 가입, PROTECTED는 가입 대기 상태가 됩니다.
   const requestJoinBrain = async (brain) => {
     if (!isAuthenticated) {
@@ -1929,7 +2057,9 @@ export default function MainPage() {
 
     try {
       await apiPost(endpoints.brains.join(brain.id), {});
-      showToast(`${brain.name} 가입 요청을 보냈습니다.`);
+      const myBrains = await apiGet(endpoints.brains.mine);
+      const joinedBrain = (myBrains?.brains || []).some((joined) => String(joined.id ?? joined.bid ?? joined.brainId) === String(brain.id));
+      showToast(joinedBrain ? `${brain.name} 가입이 완료되었습니다.` : `${brain.name} 가입 요청을 보냈습니다.`);
       await loadMainData();
     } catch (error) {
       showToast(`가입 요청 실패 · ${error.message}`);
@@ -2116,6 +2246,9 @@ export default function MainPage() {
           onInviteUser={inviteBrainUser}
           onRemoveMember={removeBrainMember}
           onManageJoinRequest={manageJoinRequest}
+          onChangeMemberRole={changeBrainMemberRole}
+          onDeleteBrain={deleteBrain}
+          canAdministerWorkspace={canAdministerWorkspace}
         />
       )}
     </main>

@@ -31,7 +31,7 @@ export default function InsightsPanel({ activeBrain, isAuthenticated, pageData, 
         <div className="activity-head"><h3 id="notice-heading">알림창</h3><button type="button" onClick={(event) => onRoute(event, "/notifications")}>View All</button></div>
         <div className="notice-list">
           {pageData.notifications.length > 0 ? pageData.notifications.map((notice) => (
-            <button className="notice-card" type="button" key={notice.id} data-endpoint={endpoints.nodes.detail(notice.nodeId)} onClick={(event) => onRoute(event, `/nodes/${notice.nodeId}`)}>
+            <button className="notice-card" type="button" key={notice.id} data-endpoint={endpoints.nodes.detail(notice.nodeId)} onClick={(event) => onRoute(event, notice.route || `/nodes/${notice.nodeId}`)}>
               <strong>{notice.brain} ({notice.topic})</strong>
               <span>{notice.node}에 {notice.author}님이<br />댓글을 작성하였습니다.</span>
             </button>

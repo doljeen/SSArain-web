@@ -7,10 +7,16 @@ export default function BrainManagerPanel({
   onSearchAvailableUsers,
   onInviteUser,
   onRemoveMember,
-  onManageJoinRequest
+  onManageJoinRequest,
+  onChangeMemberRole,
+  onDeleteBrain,
+  canAdministerWorkspace
 }) {
   const form = manager.form;
   const isProtected = form.joinPolicy === "PROTECTED";
+  const roleLabels = { USER: "일반학생", MANAGER: "반장", ADMIN: "관리자" };
+  const getRoleValue = (role) => String(role || "USER").toUpperCase();
+  const getRoleLabel = (role) => roleLabels[getRoleValue(role)] || "일반학생";
 
   return (
     <div className="brain-manager-backdrop" role="presentation" onClick={onClose}>
@@ -76,7 +82,24 @@ export default function BrainManagerPanel({
                     <article className="member-item" key={member.id}>
                       <span className="member-avatar">{(member.name || "U").slice(0, 1)}</span>
                       <span><strong>{member.name}</strong><small>{member.email}</small></span>
-                      <button type="button" onClick={() => onRemoveMember(member)}>삭제</button>
+                      <div className="member-actions">
+                        <span className={`member-role-badge is-${getRoleValue(member.brainRole || member.role).toLowerCase()}`}>
+                          {getRoleLabel(member.brainRole || member.role)}
+                        </span>
+                        {canAdministerWorkspace && (
+                          <select
+                            className="member-role-select"
+                            value={getRoleValue(member.brainRole || member.role)}
+                            onChange={(event) => onChangeMemberRole(member, event.target.value)}
+                            aria-label={`${member.name} 권한 변경`}
+                          >
+                            <option value="USER">일반학생</option>
+                            <option value="MANAGER">반장</option>
+                            <option value="ADMIN">관리자</option>
+                          </select>
+                        )}
+                        <button type="button" onClick={() => onRemoveMember(member)}>삭제</button>
+                      </div>
                     </article>
                   )) : <p className="brain-manager-empty">멤버를 불러오지 못했거나 아직 없습니다.</p>}
                 </div>
@@ -118,6 +141,24 @@ export default function BrainManagerPanel({
               )) : <p className="brain-manager-empty">대기 중인 가입 요청이 없습니다.</p>}
             </div>
           </section>
+
+          {canAdministerWorkspace && (
+            <section className="brain-manager-section brain-danger-section">
+              <div>
+                <p className="panel-kicker">DANGER ZONE</p>
+                <h3>Brain 삭제</h3>
+                <span>Brain과 연결된 멤버, Topic 정보를 삭제합니다.</span>
+              </div>
+              <button
+                className="danger-button"
+                type="button"
+                onClick={onDeleteBrain}
+                disabled={manager.isDeleting}
+              >
+                {manager.isDeleting ? "삭제 중" : "Brain 삭제"}
+              </button>
+            </section>
+          )}
         </div>
       </section>
     </div>
