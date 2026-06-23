@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiGet, apiPatch, apiPost } from "../../api/client.js";
+import { apiGet, apiPatch, apiPost, isAuthError } from "../../api/client.js";
 import { endpoints } from "../../api/endpoints.js";
 import { normalizeUserInfo } from "../main/config/mainUtils.js";
 import Icon from "../../shared/icons/Icon.jsx";
@@ -188,8 +188,12 @@ export default function MyPage() {
         }
         await loadActivities();
       } catch (error) {
-        sessionStorage.removeItem(AUTH_STATE_KEY);
-        routeTo("/login");
+        if (isAuthError(error)) {
+          sessionStorage.removeItem(AUTH_STATE_KEY);
+          routeTo("/login");
+          return;
+        }
+        setStatus(`사용자 정보를 불러오지 못했습니다 · ${error.message}`);
       } finally {
         setIsLoading(false);
       }

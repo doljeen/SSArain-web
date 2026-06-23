@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { apiDelete, apiGet, apiPatch, apiPost } from "../../api/client.js";
+import { apiDelete, apiGet, apiPatch, apiPost, isAuthError } from "../../api/client.js";
 import { endpoints } from "../../api/endpoints.js";
 import { guestPreview } from "../../data/guestPreview.js";
 import { getCurrentRoute, routeTo, ROUTE_EVENTS, syncDocumentRoute } from "../../shared/router/routes.js";
@@ -844,15 +844,21 @@ export default function MainPage() {
         topicNodesById
       }));
     } catch (error) {
-      sessionStorage.removeItem(AUTH_STATE_KEY);
-      setAuthStatus("guest");
-      setApiStatus("guest");
-      setPageData((current) => ({
-        ...current,
-        ...guestPreview,
-        topicNodesById: {},
-        user: { name: "Guest", email: "", role: "GUEST" }
-      }));
+      if (isAuthError(error)) {
+        sessionStorage.removeItem(AUTH_STATE_KEY);
+        setAuthStatus("guest");
+        setApiStatus("guest");
+        setPageData((current) => ({
+          ...current,
+          ...guestPreview,
+          topicNodesById: {},
+          user: { name: "Guest", email: "", role: "GUEST" }
+        }));
+        return;
+      }
+
+      setApiStatus("was-error");
+      showToast(`데이터를 불러오지 못했습니다 · ${error.message}`);
     }
   };
 
