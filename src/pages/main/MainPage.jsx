@@ -181,15 +181,15 @@ const updateBrainUserRole = (users, userId, role) => users.map((user) => (
 ));
 const formatBrainRole = (role) => ROLE_LABELS[normalizeRoleValue(role)] || role || "일반학생";
 const rootScatterPositions = [
-  { x: -900, y: -360 },
-  { x: 920, y: 360 },
+  { x: -1040, y: -420 },
+  { x: 1080, y: 420 },
   { x: 0, y: 0 },
-  { x: -480, y: 560 },
-  { x: 560, y: -560 },
-  { x: -1180, y: 180 },
-  { x: 1220, y: -180 },
-  { x: -1280, y: -620 },
-  { x: 1320, y: 640 }
+  { x: -560, y: 650 },
+  { x: 620, y: -650 },
+  { x: -1360, y: 210 },
+  { x: 1400, y: -210 },
+  { x: -1460, y: -700 },
+  { x: 1500, y: 720 }
 ];
 
 const collectTopicLayoutPoints = (rootTopics) => {
@@ -213,10 +213,10 @@ const collectTopicLayoutPoints = (rootTopics) => {
       const side = branchSide || (index % 2 === 0 ? 1 : -1);
       const sameSideIndex = children.slice(0, index).filter((_, childIndex) => (branchSide || (childIndex % 2 === 0 ? 1 : -1)) === side).length;
       const sameSideTotal = children.filter((_, childIndex) => (branchSide || (childIndex % 2 === 0 ? 1 : -1)) === side).length;
-      const yOffset = (sameSideIndex - ((sameSideTotal - 1) / 2)) * (depth === 1 ? 250 : 190);
+      const yOffset = (sameSideIndex - ((sameSideTotal - 1) / 2)) * (depth === 1 ? 290 : 230);
       const node = {
         topic: child,
-        x: parentNode.x + (side * (depth === 1 ? 430 : 330)),
+        x: parentNode.x + (side * (depth === 1 ? 500 : 400)),
         y: parentNode.y + yOffset
       };
 

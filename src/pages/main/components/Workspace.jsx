@@ -13,16 +13,68 @@ const lineStyle = (fromX, fromY, toX, toY) => {
 };
 
 const rootScatterPositions = [
-  { x: -900, y: -360 },
-  { x: 920, y: 360 },
+  { x: -1040, y: -420 },
+  { x: 1080, y: 420 },
   { x: 0, y: 0 },
-  { x: -480, y: 560 },
-  { x: 560, y: -560 },
-  { x: -1180, y: 180 },
-  { x: 1220, y: -180 },
-  { x: -1280, y: -620 },
-  { x: 1320, y: 640 }
+  { x: -560, y: 650 },
+  { x: 620, y: -650 },
+  { x: -1360, y: 210 },
+  { x: 1400, y: -210 },
+  { x: -1460, y: -700 },
+  { x: 1500, y: 720 }
 ];
+
+const topicBlockerForNode = (topicNode) => {
+  const isRoot = topicNode.depth == null;
+  const isSmall = topicNode.depth > 1;
+  const width = isRoot ? 230 : isSmall ? 240 : 260;
+  const height = isRoot ? 230 : isSmall ? 142 : 156;
+
+  return {
+    topicId: String(topicNode.topic.id),
+    left: topicNode.x - (width / 2),
+    right: topicNode.x + (width / 2),
+    top: topicNode.y - (height / 2),
+    bottom: topicNode.y + (height / 2)
+  };
+};
+
+const rectForPoint = (x, y, width, height) => ({
+  left: x - (width / 2),
+  right: x + (width / 2),
+  top: y - (height / 2),
+  bottom: y + (height / 2)
+});
+
+const rectsOverlap = (first, second) => (
+  first.left < second.right
+  && first.right > second.left
+  && first.top < second.bottom
+  && first.bottom > second.top
+);
+
+const findOpenNeuronPosition = ({ topicNode, angle, radius, blockers, width, height }) => {
+  const angleOffsets = [0, 0.28, -0.28, 0.56, -0.56, 0.84, -0.84, 1.12, -1.12, 1.4, -1.4, 1.68, -1.68];
+  const radiusOffsets = [0, 54, 108, 162, 216, 270];
+
+  for (const radiusOffset of radiusOffsets) {
+    for (const angleOffset of angleOffsets) {
+      const nextAngle = angle + angleOffset;
+      const nextRadius = radius + radiusOffset;
+      const x = topicNode.x + (Math.cos(nextAngle) * nextRadius);
+      const y = topicNode.y + (Math.sin(nextAngle) * nextRadius);
+      const neuronRect = rectForPoint(x, y, width, height);
+      const isBlocked = blockers.some((blocker) => rectsOverlap(neuronRect, blocker));
+
+      if (!isBlocked) return { x, y };
+    }
+  }
+
+  return {
+    x: topicNode.x + (Math.cos(angle) * (radius + 154)),
+    y: topicNode.y + (Math.sin(angle) * (radius + 154))
+  };
+};
 
 const findTopicPath = (topics, topicId, path = []) => {
   for (const topic of topics) {
@@ -60,10 +112,10 @@ const collectTopicMap = (rootTopics, activeTopicId) => {
       const side = branchSide || (index % 2 === 0 ? 1 : -1);
       const sameSideIndex = children.slice(0, index).filter((_, childIndex) => (branchSide || (childIndex % 2 === 0 ? 1 : -1)) === side).length;
       const sameSideTotal = children.filter((_, childIndex) => (branchSide || (childIndex % 2 === 0 ? 1 : -1)) === side).length;
-      const yOffset = (sameSideIndex - ((sameSideTotal - 1) / 2)) * (depth === 1 ? 250 : 190);
+      const yOffset = (sameSideIndex - ((sameSideTotal - 1) / 2)) * (depth === 1 ? 290 : 230);
       const node = {
         topic: child,
-        x: parentNode.x + (side * (depth === 1 ? 430 : 330)),
+        x: parentNode.x + (side * (depth === 1 ? 500 : 400)),
         y: parentNode.y + yOffset,
         depth,
         side,
@@ -87,21 +139,46 @@ const collectTopicMap = (rootTopics, activeTopicId) => {
 const TopicTreeGraph = ({ rootTopics, activeTopic, topicNodesById = {}, graphScale = 1, onMoveToTopic, onOpenNodeDetail }) => {
   const { rootNodes, descendantNodes, links, selectedTopic } = collectTopicMap(rootTopics, activeTopic?.id);
   const allTopicNodes = [...rootNodes, ...descendantNodes];
-  const shouldShowNeuronDetail = Number(graphScale || 1) >= 1.15;
-  const positionedNeurons = allTopicNodes.flatMap((topicNode) => {
+  const shouldShowNeuronDetail = Number(graphScale || 1) >= 0.72;
+  const topicBlockers = allTopicNodes.map(topicBlockerForNode);
+  const positionedNeurons = [];
+  const placedExpandedNeuronBlockers = [];
+
+  allTopicNodes.forEach((topicNode) => {
     const topicNeurons = topicNodesById[String(topicNode.topic.id)] || [];
     const neuronCount = topicNeurons.length;
-    const neuronRadius = neuronCount > 12 ? 176 : neuronCount > 6 ? 158 : 138;
+    const isSelectedTopic = selectedTopic && String(topicNode.topic.id) === String(selectedTopic.id);
+    const isExpanded = isSelectedTopic && shouldShowNeuronDetail;
+    const perRing = isExpanded ? 8 : 12;
+    const topicBlockersExceptSelf = topicBlockers.filter((blocker) => blocker.topicId !== String(topicNode.topic.id));
+    const cardWidth = isExpanded ? 168 : 62;
+    const cardHeight = isExpanded ? 92 : 62;
 
-    return topicNeurons.map((node, index) => {
-      const angle = ((Math.PI * 2) / Math.max(neuronCount, 1)) * index - (Math.PI / 2);
-      const ringOffset = neuronCount > 10 && index % 2 ? 34 : 0;
-      return {
+    topicNeurons.forEach((node, index) => {
+      const ring = Math.floor(index / perRing);
+      const ringIndex = index % perRing;
+      const ringCount = Math.min(perRing, neuronCount - (ring * perRing));
+      const angleJitter = ((index % 5) - 2) * 0.08;
+      const radiusJitter = ((index % 4) - 1.5) * 14;
+      const angle = ((Math.PI * 2) / Math.max(ringCount, 1)) * ringIndex - (Math.PI / 2) + (ring * 0.31) + angleJitter;
+      const neuronRadius = (isExpanded ? 235 : 150) + (ring * (isExpanded ? 126 : 56)) + radiusJitter;
+      const position = findOpenNeuronPosition({
+        topicNode,
+        angle,
+        radius: neuronRadius,
+        blockers: isExpanded ? [...topicBlockersExceptSelf, ...placedExpandedNeuronBlockers] : topicBlockersExceptSelf,
+        width: cardWidth,
+        height: cardHeight
+      });
+      if (isExpanded) placedExpandedNeuronBlockers.push(rectForPoint(position.x, position.y, cardWidth + 18, cardHeight + 18));
+
+      positionedNeurons.push({
         node,
         topicNode,
-        x: topicNode.x + (Math.cos(angle) * (neuronRadius + ringOffset)),
-        y: topicNode.y + (Math.sin(angle) * (neuronRadius + ringOffset))
-      };
+        isExpanded,
+        x: position.x,
+        y: position.y
+      });
     });
   });
 
@@ -119,7 +196,7 @@ const TopicTreeGraph = ({ rootTopics, activeTopic, topicNodesById = {}, graphSca
 
       {positionedNeurons.map((item) => (
         <button
-          className="neuron-map-node is-main"
+          className={`neuron-map-node is-main ${item.isExpanded ? "is-expanded" : ""}`}
           key={`${item.topicNode.topic.id}-${item.node.id}`}
           type="button"
           style={{ "--node-x": `${item.x}px`, "--node-y": `${item.y}px` }}

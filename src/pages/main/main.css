@@ -778,9 +778,9 @@ button {
   position: absolute;
   left: 50%;
   top: 52%;
-  width: min(2400px, calc(100vw - 500px));
-  min-width: 1900px;
-  height: 1120px;
+  width: min(3000px, calc(100vw - 500px));
+  min-width: 2300px;
+  height: 1400px;
   transform: translate(-50%, -50%);
 }
 
@@ -806,7 +806,7 @@ button {
   box-shadow: 0 12px 28px rgba(37, 50, 70, 0.1);
   transform: translate(calc(var(--node-x) - 50%), calc(var(--node-y) - 50%));
   overflow: hidden;
-  z-index: 12;
+  z-index: 28;
 }
 
 .topic-map-node span {
@@ -827,7 +827,7 @@ button {
   color: #ffffff;
   font-size: 15px;
   box-shadow: 0 20px 42px rgba(17, 23, 43, 0.24);
-  z-index: 14;
+  z-index: 30;
 }
 
 .topic-map-node.is-root.is-active {
@@ -844,6 +844,7 @@ button {
   border-color: #6d5dfc;
   color: #4f46e5;
   box-shadow: 0 16px 34px rgba(109, 93, 252, 0.2);
+  z-index: 32;
 }
 
 .topic-map-node.is-small {
@@ -943,10 +944,16 @@ button {
   z-index: 6;
 }
 
-.topic-map.is-detail-zoom .neuron-map-node.is-main {
-  width: 136px;
-  min-height: 58px;
-  padding: 9px 12px;
+.neuron-map-node.is-main.is-expanded {
+  z-index: 18;
+}
+
+.neuron-map-node.is-main.is-expanded,
+.neuron-map-node.is-main:hover,
+.neuron-map-node.is-main:focus-visible {
+  width: 126px;
+  min-height: 54px;
+  padding: 8px 11px;
   place-items: start center;
   gap: 4px;
   border-radius: 16px;
@@ -990,7 +997,9 @@ button {
   pointer-events: none;
 }
 
-.topic-map.is-detail-zoom .neuron-map-node.is-main strong {
+.neuron-map-node.is-main.is-expanded strong,
+.neuron-map-node.is-main:hover strong,
+.neuron-map-node.is-main:focus-visible strong {
   width: 100%;
   height: auto;
   opacity: 1;
