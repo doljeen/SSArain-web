@@ -23,6 +23,8 @@ const MIN_GRAPH_SCALE = 0.18;
 const MAX_GRAPH_SCALE = 2.2;
 const MAX_GRAPH_PAN_X = 3200;
 const MAX_GRAPH_PAN_Y = 2200;
+const NODE_CONTENT_BYTE_LIMIT = 20000;
+const textEncoder = new TextEncoder();
 
 const emptyBrainManager = {
   isOpen: false,
@@ -84,10 +86,37 @@ const getBrainIdFromRoute = (path) => {
 const isBrainSearchRoute = (path) => path === "/brains/search";
 const getViewFromRoute = (path) => path.includes("/quiz") ? "quiz" : path.includes("/posts") || path.startsWith("/nodes/") ? "posts" : "synapse";
 const normalizeRoleValue = (role) => String(role || "").trim().toUpperCase();
-const MANAGE_ROLE_NAMES = ["ADMIN", "MANAGER", "LEADER", "BRAIN_ADMIN", "BRAIN_MANAGER", "ROLE_ADMIN", "ROLE_MANAGER", "OWNER", "CAPTAIN", "관리자", "반장"];
-const ADMIN_ROLE_NAMES = ["ADMIN", "BRAIN_ADMIN", "ROLE_ADMIN", "OWNER", "관리자"];
+const MANAGE_ROLE_NAMES = ["ADMIN", "MANAGER"];
+const ADMIN_ROLE_NAMES = ["ADMIN"];
 const canUseManageMode = (role) => MANAGE_ROLE_NAMES.includes(normalizeRoleValue(role));
 const canAdministerRole = (role) => ADMIN_ROLE_NAMES.includes(normalizeRoleValue(role));
+
+const getByteLength = (value) => textEncoder.encode(value || "").length;
+
+const truncateToByteLimit = (value, limit) => {
+  let currentBytes = 0;
+  let result = "";
+
+  for (const character of value || "") {
+    const characterBytes = getByteLength(character);
+    if (currentBytes + characterBytes > limit) break;
+    currentBytes += characterBytes;
+    result += character;
+  }
+
+  return result;
+};
+
+const normalizeErrorMessage = (message) => {
+  const text = String(message || "");
+  if (text.includes("413") || text.includes("Request Entity Too Large")) {
+    return `내용은 ${NODE_CONTENT_BYTE_LIMIT.toLocaleString()}Byte 이하로 작성해주세요.`;
+  }
+  if (text.includes("<html") || text.includes("<!doctype")) {
+    return "요청 처리 중 오류가 발생했습니다.";
+  }
+  return text;
+};
 const pickPreservedBrainRole = (...roles) => {
   const normalizedRoles = roles.map(normalizeRoleValue).filter(Boolean);
   return normalizedRoles.find(canUseManageMode) || normalizedRoles[0] || "";
@@ -287,23 +316,27 @@ export default function MainPage() {
 
   // 트리 구조의 토픽을 펼쳐서 현재 선택된 Brain/Topic을 계산합니다.
   const topicsFlat = useMemo(() => flattenTopics(pageData.topics), [pageData.topics]);
+  const nodeContentByteCount = useMemo(() => getByteLength(nodeDraft.content), [nodeDraft.content]);
   const activeBrain = pageData.brains.find((brain) => String(brain.id) === String(pageData.activeBrainId)) || null;
   const activeTopic = topicsFlat.find((topic) => String(topic.id) === String(pageData.activeTopicId)) || null;
   const isZoomed = graph.scale >= 1.28;
   const isAuthenticated = authStatus === "authenticated";
   const isBrainSearchView = isBrainSearchRoute(route);
   const activeBrainRole = normalizeRoleValue(activeBrain?.brainRole || activeBrain?.role);
-  const userRole = normalizeRoleValue(pageData.user?.role);
-  const isGlobalAdmin = canAdministerRole(userRole);
+  const canManageBrain = (brain) => Boolean(
+    isAuthenticated
+    && brain
+    && canUseManageMode(brain.brainRole || brain.role)
+  );
   const canManageWorkspace = Boolean(
     isAuthenticated
     && activeBrain
-    && (canUseManageMode(activeBrainRole) || isGlobalAdmin)
+    && canUseManageMode(activeBrainRole)
   );
   const canAdministerWorkspace = Boolean(
     isAuthenticated
     && activeBrain
-    && (canAdministerRole(activeBrainRole) || isGlobalAdmin)
+    && canAdministerRole(activeBrainRole)
   );
   const isCurrentUserWriter = (writer) => {
     const targetWriter = String(writer || "").trim();
@@ -358,14 +391,19 @@ export default function MainPage() {
 
   const rememberActiveBrainState = () => {
     if (!pageData.activeBrainId || authStatus !== "authenticated") return;
-    brainTabState.current[String(pageData.activeBrainId)] = {
+    const brainId = String(pageData.activeBrainId);
+    const previousState = brainTabState.current[brainId] || {};
+    const rememberedTopics = pageData.topics?.length ? pageData.topics : previousState.topics || [];
+    const rememberedCatalog = topicCatalog?.length ? topicCatalog : previousState.topicCatalog || [];
+
+    brainTabState.current[brainId] = {
       activeTopicId: pageData.activeTopicId,
       view,
       graph,
-      topics: clone(pageData.topics),
+      topics: clone(rememberedTopics),
       nodes: clone(pageData.nodes),
       topicNodesById: clone(pageData.topicNodesById || {}),
-      topicCatalog: clone(topicCatalog)
+      topicCatalog: clone(rememberedCatalog)
     };
   };
 
@@ -1040,6 +1078,16 @@ export default function MainPage() {
 
   const updateNodeDraft = (event) => {
     const { name, value } = event.target;
+
+    if (name === "content") {
+      setNodeDraft((current) => ({
+        ...current,
+        content: truncateToByteLimit(value, NODE_CONTENT_BYTE_LIMIT),
+        status: ""
+      }));
+      return;
+    }
+
     setNodeDraft((current) => ({ ...current, [name]: value, status: "" }));
   };
 
@@ -1057,6 +1105,11 @@ export default function MainPage() {
 
     if (!title || !content) {
       setNodeDraft((current) => ({ ...current, status: "제목과 내용을 모두 입력해주세요." }));
+      return;
+    }
+
+    if (getByteLength(content) > NODE_CONTENT_BYTE_LIMIT) {
+      setNodeDraft((current) => ({ ...current, status: `내용은 ${NODE_CONTENT_BYTE_LIMIT.toLocaleString()}Byte 이하로 작성해주세요.` }));
       return;
     }
 
@@ -1088,7 +1141,7 @@ export default function MainPage() {
       setRoute(`/nodes/${created.nid || nextNode.id}`);
       showToast(`${created.title || title} Neuron 작성 완료`);
     } catch (error) {
-      setNodeDraft((current) => ({ ...current, isSubmitting: false, status: `Neuron 작성 실패 · ${error.message}` }));
+      setNodeDraft((current) => ({ ...current, isSubmitting: false, status: `Neuron 작성 실패 · ${normalizeErrorMessage(error.message)}` }));
     }
   };
 
@@ -1137,12 +1190,23 @@ export default function MainPage() {
   const selectBrain = (event, brainId, options = {}) => {
     const targetBrainId = String(brainId);
     const cachedState = brainTabState.current[targetBrainId];
-    const nextRoute = buildBrainStateRoute(targetBrainId, cachedState);
+    const isCurrentBrain = String(pageData.activeBrainId) === targetBrainId;
 
-    if (String(pageData.activeBrainId) === targetBrainId && route === nextRoute) {
+    if (isCurrentBrain) {
       event?.preventDefault?.();
+      rememberActiveBrainState();
+      if (options.openTab !== false) {
+        addBrainTab(brainId);
+      }
+      if (!pageData.topics?.length) {
+        loadBrainWorkspace(brainId, pageData.activeTopicId || cachedState?.activeTopicId || null, {
+          view: cachedState?.view || view || "synapse"
+        });
+      }
       return;
     }
+
+    const nextRoute = buildBrainStateRoute(targetBrainId, cachedState);
 
     ++workspaceLoadSeq.current;
     rememberActiveBrainState();
@@ -1150,7 +1214,8 @@ export default function MainPage() {
       addBrainTab(brainId);
     }
 
-    const hasCachedState = applyCachedBrainState(brainId, cachedState);
+    const hasUsableCachedState = Boolean(cachedState?.topics?.length);
+    const hasCachedState = hasUsableCachedState && applyCachedBrainState(brainId, cachedState);
 
     if (!hasCachedState) {
       setPageData((current) => ({
@@ -1904,6 +1969,7 @@ export default function MainPage() {
         activeBrain={activeBrain}
         activeTopic={activeTopic}
         apiStatus={apiStatus}
+        canManageBrain={canManageBrain}
         canManageWorkspace={canManageWorkspace}
         isAuthenticated={isAuthenticated}
         pageData={pageData}
@@ -2005,7 +2071,21 @@ export default function MainPage() {
               </label>
               <label>
                 <span>내용</span>
-                <textarea name="content" value={nodeDraft.content} onChange={updateNodeDraft} placeholder="정리할 내용을 작성해주세요." rows={9} required />
+                <textarea
+                  name="content"
+                  value={nodeDraft.content}
+                  onChange={updateNodeDraft}
+                  placeholder="정리할 내용을 작성해주세요."
+                  rows={9}
+                  aria-describedby="node-content-byte-count"
+                  required
+                />
+                <span
+                  id="node-content-byte-count"
+                  className={`node-byte-counter ${nodeContentByteCount >= NODE_CONTENT_BYTE_LIMIT ? "is-limit" : ""}`}
+                >
+                  {nodeContentByteCount.toLocaleString()}/{NODE_CONTENT_BYTE_LIMIT.toLocaleString()}Byte
+                </span>
               </label>
               <div className="node-create-actions">
                 <button type="button" onClick={closeNodeCreateModal}>취소</button>

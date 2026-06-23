@@ -2341,6 +2341,19 @@ button {
   padding: 16px;
   resize: vertical;
   line-height: 1.6;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.node-byte-counter {
+  justify-self: end;
+  color: #8a9ab3;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.node-byte-counter.is-limit {
+  color: #ef4444;
 }
 
 .node-create-form input:focus,
