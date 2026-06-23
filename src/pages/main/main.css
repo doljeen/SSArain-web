@@ -844,17 +844,47 @@ button {
   line-height: 1.15;
   box-shadow: 0 12px 28px rgba(37, 50, 70, 0.1);
   transform: translate(calc(var(--node-x) - 50%), calc(var(--node-y) - 50%));
-  overflow: hidden;
+  overflow: visible;
   z-index: 28;
 }
 
-.topic-map-node span {
+.topic-map-node .topic-title {
   max-width: 100%;
   display: -webkit-box;
   overflow: hidden;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.topic-quiz-badge {
+  position: absolute;
+  right: -15px;
+  top: -16px;
+  width: 35px;
+  height: 35px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: var(--color-purple-strong);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 950;
+  line-height: 1;
+  box-shadow: 0 8px 18px rgba(101, 87, 255, 0.28);
+  pointer-events: auto;
+}
+
+.topic-map-node.is-root .topic-quiz-badge {
+  right: 3px;
+  top: 3px;
+  background: #8177ff;
+}
+
+.topic-map-node.is-selected .topic-quiz-badge {
+  background: #4f46e5;
+  box-shadow: 0 10px 22px rgba(79, 70, 229, 0.34);
 }
 
 .topic-map-node.is-root {

@@ -47,6 +47,7 @@ const emptyPageData = {
   topics: [],
   nodes: [],
   topicNodesById: {},
+  quizStatusByTopicId: {},
   notifications: [],
   activities: []
 };
@@ -451,6 +452,7 @@ export default function MainPage() {
       topics: clone(rememberedTopics),
       nodes: clone(pageData.nodes),
       topicNodesById: clone(pageData.topicNodesById || {}),
+      quizStatusByTopicId: clone(pageData.quizStatusByTopicId || {}),
       topicCatalog: clone(rememberedCatalog)
     };
   };
@@ -464,7 +466,8 @@ export default function MainPage() {
       activeTopicId: cachedState.activeTopicId || null,
       topics: clone(cachedState.topics || []),
       nodes: clone(cachedState.nodes || []),
-      topicNodesById: clone(cachedState.topicNodesById || {})
+      topicNodesById: clone(cachedState.topicNodesById || {}),
+      quizStatusByTopicId: clone(cachedState.quizStatusByTopicId || {})
     }));
     setTopicCatalog(clone(cachedState.topicCatalog || []));
     setGraph(clampGraph(cachedState.graph || { x: 0, y: 0, scale: 1, tilt: 0 }));
@@ -485,7 +488,8 @@ export default function MainPage() {
         ? current.activeTopicId
         : (visibleFlat[0] ? String(visibleFlat[0].id) : null),
       nodes: visibleFlat.length ? current.nodes : [],
-      topicNodesById: visibleFlat.length ? current.topicNodesById || {} : {}
+      topicNodesById: visibleFlat.length ? current.topicNodesById || {} : {},
+      quizStatusByTopicId: visibleFlat.length ? current.quizStatusByTopicId || {} : {}
     }));
   };
 
@@ -554,6 +558,20 @@ export default function MainPage() {
     return Object.fromEntries(entries);
   };
 
+  const fetchVisibleTopicQuizStatuses = async (topics = []) => {
+    const flatTopics = flattenTopics(topics).filter((topic) => topic?.btid);
+    const entries = await Promise.all(flatTopics.map(async (topic) => {
+      try {
+        const result = await apiGet(endpoints.quizzes.list(topic.btid));
+        const quizCount = Array.isArray(result?.quizzes) ? result.quizzes.length : 0;
+        return [String(topic.id), { hasQuiz: quizCount > 0, quizCount }];
+      } catch (error) {
+        return [String(topic.id), { hasQuiz: false, quizCount: 0 }];
+      }
+    }));
+    return Object.fromEntries(entries);
+  };
+
   // 현재 BrainTopic에 저장된 퀴즈를 WAS에서 조회합니다.
   const loadTopicQuizzes = async (topic = activeTopic) => {
     const targetTopic = topic?.btid ? topic : await resolveActiveTopicForNeuron();
@@ -568,6 +586,13 @@ export default function MainPage() {
     try {
       const result = await apiGet(endpoints.quizzes.list(targetTopic.btid));
       const quizzes = normalizeQuizzes(result?.quizzes || []);
+      setPageData((current) => ({
+        ...current,
+        quizStatusByTopicId: {
+          ...(current.quizStatusByTopicId || {}),
+          [String(targetTopic.id)]: { hasQuiz: quizzes.length > 0, quizCount: quizzes.length }
+        }
+      }));
       setQuizState({ isLoading: false, isGenerating: false, status: "", quizzes, answers: {}, submitted: false });
     } catch (error) {
       setQuizState({ isLoading: false, isGenerating: false, status: `퀴즈를 불러오지 못했습니다 · ${error.message}`, quizzes: [], answers: {}, submitted: false });
@@ -602,6 +627,13 @@ export default function MainPage() {
     try {
       const result = await apiPost(endpoints.quizzes.create(targetTopic.btid), {});
       const quizzes = normalizeQuizzes(result?.quizzes || []);
+      setPageData((current) => ({
+        ...current,
+        quizStatusByTopicId: {
+          ...(current.quizStatusByTopicId || {}),
+          [String(targetTopic.id)]: { hasQuiz: quizzes.length > 0, quizCount: quizzes.length }
+        }
+      }));
       setQuizState({
         isLoading: false,
         isGenerating: false,
@@ -727,7 +759,10 @@ export default function MainPage() {
         ? flatTopics.find((topic) => String(topic.id) === String(preferredTopicId)) || null
         : null;
       const nextView = selectedTopic ? options.view || cachedState?.view || view : "synapse";
-      const topicNodesById = await fetchVisibleTopicNodePreviews(brainId, visibleTopics);
+      const [topicNodesById, quizStatusByTopicId] = await Promise.all([
+        fetchVisibleTopicNodePreviews(brainId, visibleTopics),
+        fetchVisibleTopicQuizStatuses(visibleTopics)
+      ]);
       if (requestId !== workspaceLoadSeq.current) return;
 
       const nodes = nextView === "posts" && selectedTopic
@@ -750,7 +785,8 @@ export default function MainPage() {
         )),
         topics: visibleTopics,
         nodes,
-        topicNodesById
+        topicNodesById,
+        quizStatusByTopicId
       }));
       setView(nextView);
       setApiStatus("was");
@@ -772,6 +808,7 @@ export default function MainPage() {
         ...current,
         ...guestPreview,
         topicNodesById: {},
+        quizStatusByTopicId: {},
         user: { name: "Guest", email: "", role: "GUEST" }
       }));
       return;
@@ -792,6 +829,7 @@ export default function MainPage() {
       let catalogTopics = [];
       let nodes = [];
       let topicNodesById = {};
+      let quizStatusByTopicId = {};
       let activeTopicId = null;
       let nextBrains = brains;
 
@@ -808,7 +846,10 @@ export default function MainPage() {
         ? flatTopics.find((topic) => String(topic.id) === String(routedTopicId)) || null
         : null;
       activeTopicId = selectedTopic ? String(selectedTopic.id) : null;
-      topicNodesById = await fetchVisibleTopicNodePreviews(selectedBrain.id, visibleTopics);
+      [topicNodesById, quizStatusByTopicId] = await Promise.all([
+        fetchVisibleTopicNodePreviews(selectedBrain.id, visibleTopics),
+        fetchVisibleTopicQuizStatuses(visibleTopics)
+      ]);
       if (requestId !== workspaceLoadSeq.current) return;
 
       nodes = getViewFromRoute(route) === "posts" && selectedTopic
@@ -841,7 +882,8 @@ export default function MainPage() {
         brains: nextBrains,
         topics,
         nodes,
-        topicNodesById
+        topicNodesById,
+        quizStatusByTopicId
       }));
     } catch (error) {
       if (isAuthError(error)) {
@@ -852,6 +894,7 @@ export default function MainPage() {
           ...current,
           ...guestPreview,
           topicNodesById: {},
+          quizStatusByTopicId: {},
           user: { name: "Guest", email: "", role: "GUEST" }
         }));
         return;
@@ -1301,7 +1344,8 @@ export default function MainPage() {
         activeTopicId: null,
         topics: [],
         nodes: [],
-        topicNodesById: {}
+        topicNodesById: {},
+        quizStatusByTopicId: {}
       }));
       setView("synapse");
       setGraph(clampGraph({ x: 0, y: 0, scale: 1, tilt: 0 }));
@@ -1342,7 +1386,8 @@ export default function MainPage() {
             activeTopicId: null,
             topics: [],
             nodes: [],
-            topicNodesById: {}
+            topicNodesById: {},
+            quizStatusByTopicId: {}
           }));
           setView("synapse");
           routeTo("/main");
@@ -2053,7 +2098,8 @@ export default function MainPage() {
         brains: current.brains.filter((brain) => String(brain.id) !== brainId),
         topics: wasActiveBrain ? [] : current.topics,
         nodes: wasActiveBrain ? [] : current.nodes,
-        topicNodesById: wasActiveBrain ? {} : current.topicNodesById
+        topicNodesById: wasActiveBrain ? {} : current.topicNodesById,
+        quizStatusByTopicId: wasActiveBrain ? {} : current.quizStatusByTopicId
       }));
       setTopicCatalog((current) => (wasActiveBrain ? [] : current));
       setBrainManager(emptyBrainManager);

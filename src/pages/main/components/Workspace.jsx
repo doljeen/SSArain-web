@@ -136,7 +136,7 @@ const collectTopicMap = (rootTopics, activeTopicId) => {
   return { rootNodes, descendantNodes, links, selectedTopic };
 };
 
-const TopicTreeGraphComponent = ({ rootTopics, activeTopic, topicNodesById = {}, showNeuronDetail, hideNeurons, onMoveToTopic, onOpenNodeDetail }) => {
+const TopicTreeGraphComponent = ({ rootTopics, activeTopic, topicNodesById = {}, quizStatusByTopicId = {}, showNeuronDetail, hideNeurons, onMoveToTopic, onOpenNodeDetail }) => {
   const { rootNodes, descendantNodes, links, selectedTopic } = useMemo(
     () => collectTopicMap(rootTopics, activeTopic?.id),
     [rootTopics, activeTopic?.id]
@@ -218,13 +218,19 @@ const TopicTreeGraphComponent = ({ rootTopics, activeTopic, topicNodesById = {},
 
       {rootNodes.map((node) => (
         <button className={`topic-map-node is-root ${node.isActive ? "is-active" : ""}`} key={node.topic.id} type="button" style={{ "--node-x": `${node.x}px`, "--node-y": `${node.y}px` }} onClick={(event) => onMoveToTopic(event, node.topic.id)}>
-          <span>{node.topic.name}</span>
+          <span className="topic-title">{node.topic.name}</span>
+          {quizStatusByTopicId[String(node.topic.id)]?.hasQuiz && (
+            <span className="topic-quiz-badge" title={`${quizStatusByTopicId[String(node.topic.id)]?.quizCount || 0}개 퀴즈 생성됨`}>Q</span>
+          )}
         </button>
       ))}
 
       {descendantNodes.map((node) => (
         <button className={`topic-map-node ${node.depth > 1 ? "is-small" : ""} ${node.isPath ? "is-path" : ""} ${node.isSelected ? "is-selected" : ""}`} key={node.topic.id} type="button" style={{ "--node-x": `${node.x}px`, "--node-y": `${node.y}px` }} onClick={(event) => onMoveToTopic(event, node.topic.id)}>
-          <span>{node.topic.name}</span>
+          <span className="topic-title">{node.topic.name}</span>
+          {quizStatusByTopicId[String(node.topic.id)]?.hasQuiz && (
+            <span className="topic-quiz-badge" title={`${quizStatusByTopicId[String(node.topic.id)]?.quizCount || 0}개 퀴즈 생성됨`}>Q</span>
+          )}
         </button>
       ))}
 
@@ -239,6 +245,7 @@ const TopicTreeGraph = memo(TopicTreeGraphComponent, (prev, next) => (
   prev.rootTopics === next.rootTopics
   && String(prev.activeTopic?.id || "") === String(next.activeTopic?.id || "")
   && prev.topicNodesById === next.topicNodesById
+  && prev.quizStatusByTopicId === next.quizStatusByTopicId
   && prev.showNeuronDetail === next.showNeuronDetail
   && prev.hideNeurons === next.hideNeurons
 ));
@@ -551,7 +558,7 @@ export default function Workspace({
           <>
             {/* CSS 변수로 pan/zoom/tilt 값을 내려서 Prezi식 이동을 표현합니다. */}
             <div className="graph-viewport" style={{ "--pan-x": `${graph.x}px`, "--pan-y": `${graph.y}px`, "--zoom": graph.scale, "--tilt": `${graph.tilt || 0}deg` }}>
-              <TopicTreeGraph rootTopics={visibleRootTopics} activeTopic={activeTopic} topicNodesById={pageData.topicNodesById || {}} showNeuronDetail={Number(graph.scale || 1) >= 0.88} hideNeurons={hideGraphNeurons} onMoveToTopic={onMoveToTopic} onOpenNodeDetail={onOpenNodeDetail} />
+              <TopicTreeGraph rootTopics={visibleRootTopics} activeTopic={activeTopic} topicNodesById={pageData.topicNodesById || {}} quizStatusByTopicId={pageData.quizStatusByTopicId || {}} showNeuronDetail={Number(graph.scale || 1) >= 0.88} hideNeurons={hideGraphNeurons} onMoveToTopic={onMoveToTopic} onOpenNodeDetail={onOpenNodeDetail} />
             </div>
             <button
               className={`neuron-visibility-toggle ${hideGraphNeurons ? "is-hidden-mode" : ""}`}
