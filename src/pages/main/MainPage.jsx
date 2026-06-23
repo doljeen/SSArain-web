@@ -294,6 +294,7 @@ export default function MainPage() {
   const [brainManager, setBrainManager] = useState(emptyBrainManager);
   const [brainSearch, setBrainSearch] = useState({
     query: "",
+    includeJoined: false,
     results: [],
     currentPage: 0,
     totalPages: 0,
@@ -802,13 +803,14 @@ export default function MainPage() {
   };
 
   // WAS Brain 검색 API(B05)를 호출해 중앙 검색 화면의 목록을 갱신합니다.
-  const searchBrains = async (query = brainSearch.query, page = 0) => {
-    setBrainSearch((current) => ({ ...current, query, isLoading: true, message: "" }));
+  const searchBrains = async (query = brainSearch.query, page = 0, includeJoined = brainSearch.includeJoined) => {
+    setBrainSearch((current) => ({ ...current, query, includeJoined, isLoading: true, message: "" }));
 
     try {
-      const result = await apiGet(endpoints.brains.search(query, page, 6));
+      const result = await apiGet(endpoints.brains.search(query, includeJoined, page, 6));
       setBrainSearch({
         query,
+        includeJoined,
         results: result?.brains || [],
         currentPage: result?.currentPage || 0,
         totalPages: result?.totalPages || 0,

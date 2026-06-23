@@ -310,7 +310,7 @@ export default function Workspace({
   const submitBrainSearch = (event) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    onSearchBrains(String(formData.get("brainKeyword") || "").trim(), 0);
+    onSearchBrains(String(formData.get("brainKeyword") || "").trim(), 0, brainSearch.includeJoined);
   };
   const hasBrainTabs = isAuthenticated && openBrainTabs.length > 0;
 
@@ -375,7 +375,27 @@ export default function Workspace({
         <section className="brain-search-view" aria-labelledby="brain-search-heading">
           <form className="brain-search-form" onSubmit={submitBrainSearch}>
             <label htmlFor="brain-search-input" className="sr-only">Brain 명 검색</label>
-            <input id="brain-search-input" name="brainKeyword" type="search" defaultValue={brainSearch.query} placeholder="Brain 명 검색" />
+            <div className="brain-search-row">
+              <input
+                id="brain-search-input"
+                name="brainKeyword"
+                type="search"
+                defaultValue={brainSearch.query}
+                placeholder="Brain 명 검색"
+              />
+
+              <label className="brain-search-checkbox">
+                <input
+                  type="checkbox"
+                  checked={!brainSearch.includeJoined}
+                  onChange={(event) => {
+                    const includeJoined = !event.target.checked;
+                    onSearchBrains(brainSearch.query, 0, includeJoined);
+                  }}
+                />
+                내가 소속된 Brain 제외
+              </label>
+            </div>
             <button type="submit" disabled={brainSearch.isLoading}>{brainSearch.isLoading ? "검색 중" : "검색"}</button>
           </form>
 
@@ -412,9 +432,9 @@ export default function Workspace({
           )}
 
           <div className="brain-pagination" aria-label="Brain 검색 페이지네이션">
-            <button type="button" disabled={brainSearch.isLoading || brainSearch.currentPage <= 0} onClick={() => onSearchBrains(brainSearch.query, brainSearch.currentPage - 1)}>이전</button>
+            <button type="button" disabled={brainSearch.isLoading || brainSearch.currentPage <= 0} onClick={() => onSearchBrains(brainSearch.query, brainSearch.currentPage - 1, brainSearch.includeJoined)}>이전</button>
             <span>{brainSearch.totalPages ? `${brainSearch.currentPage + 1} / ${brainSearch.totalPages}` : "0 / 0"}</span>
-            <button type="button" disabled={brainSearch.isLoading || !brainSearch.hasNext} onClick={() => onSearchBrains(brainSearch.query, brainSearch.currentPage + 1)}>다음</button>
+            <button type="button" disabled={brainSearch.isLoading || !brainSearch.hasNext} onClick={() => onSearchBrains(brainSearch.query, brainSearch.currentPage + 1, brainSearch.includeJoined)}>다음</button>
           </div>
         </section>
       ) : (

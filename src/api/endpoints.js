@@ -32,7 +32,7 @@ export const endpoints = {
   brains: {
     mine: "/brains/me",
     list: "/brains",
-    search: (name = "", page = 0, size = 9) => `/brains?${query({ name, page, size })}`,
+    search: (name = "", includeJoined = false, page = 0, size = 9) => `/brains?${query({ name, includeJoined, page, size })}`,
     nameCheck: (name) => `/brains/check-name?${query({ name })}`,
     create: "/brains",
     info: (brainId) => `/brains/${brainId}`,
