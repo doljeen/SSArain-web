@@ -136,13 +136,15 @@ const collectTopicMap = (rootTopics, activeTopicId) => {
   return { rootNodes, descendantNodes, links, selectedTopic };
 };
 
-const TopicTreeGraphComponent = ({ rootTopics, activeTopic, topicNodesById = {}, showNeuronDetail, onMoveToTopic, onOpenNodeDetail }) => {
+const TopicTreeGraphComponent = ({ rootTopics, activeTopic, topicNodesById = {}, showNeuronDetail, hideNeurons, onMoveToTopic, onOpenNodeDetail }) => {
   const { rootNodes, descendantNodes, links, selectedTopic } = useMemo(
     () => collectTopicMap(rootTopics, activeTopic?.id),
     [rootTopics, activeTopic?.id]
   );
   const allTopicNodes = useMemo(() => [...rootNodes, ...descendantNodes], [rootNodes, descendantNodes]);
   const positionedNeurons = useMemo(() => {
+    if (hideNeurons) return [];
+
     const topicBlockers = allTopicNodes.map(topicBlockerForNode);
     const nextPositionedNeurons = [];
     const placedExpandedNeuronBlockers = [];
@@ -187,7 +189,7 @@ const TopicTreeGraphComponent = ({ rootTopics, activeTopic, topicNodesById = {},
     });
 
     return nextPositionedNeurons;
-  }, [allTopicNodes, selectedTopic, showNeuronDetail, topicNodesById]);
+  }, [allTopicNodes, hideNeurons, selectedTopic, showNeuronDetail, topicNodesById]);
 
   if (!rootTopics.length) return null;
 
@@ -197,11 +199,11 @@ const TopicTreeGraphComponent = ({ rootTopics, activeTopic, topicNodesById = {},
         <span className="topic-map-link" key={`${link.from.topic.id}-${link.to.topic.id}`} style={lineStyle(link.from.x, link.from.y, link.to.x, link.to.y)} aria-hidden="true" />
       ))}
 
-      {positionedNeurons.map((item) => (
+      {!hideNeurons && positionedNeurons.map((item) => (
         <span className={`neuron-map-link is-main ${item.isSelectedTopic ? "is-selected-topic" : "is-background"}`} key={`neuron-link-${item.topicNode.topic.id}-${item.node.id}`} style={lineStyle(item.topicNode.x, item.topicNode.y, item.x, item.y)} aria-hidden="true" />
       ))}
 
-      {positionedNeurons.map((item) => (
+      {!hideNeurons && positionedNeurons.map((item) => (
         <button
           className={`neuron-map-node is-main ${item.isSelectedTopic ? "is-selected-topic" : "is-background"} ${item.isExpanded ? "is-expanded" : ""}`}
           key={`${item.topicNode.topic.id}-${item.node.id}`}
@@ -238,6 +240,7 @@ const TopicTreeGraph = memo(TopicTreeGraphComponent, (prev, next) => (
   && String(prev.activeTopic?.id || "") === String(next.activeTopic?.id || "")
   && prev.topicNodesById === next.topicNodesById
   && prev.showNeuronDetail === next.showNeuronDetail
+  && prev.hideNeurons === next.hideNeurons
 ));
 
 const formatDate = (value) => {
@@ -332,6 +335,7 @@ export default function Workspace({
 }) {
   const [postQuery, setPostQuery] = useState("");
   const [postSort, setPostSort] = useState("latest");
+  const [hideGraphNeurons, setHideGraphNeurons] = useState(false);
   const hasActiveTopic = Boolean(activeTopic);
   const visibleRootTopics = pageData.topics || [];
   const topicBreadcrumb = useMemo(
@@ -547,8 +551,17 @@ export default function Workspace({
           <>
             {/* CSS 변수로 pan/zoom/tilt 값을 내려서 Prezi식 이동을 표현합니다. */}
             <div className="graph-viewport" style={{ "--pan-x": `${graph.x}px`, "--pan-y": `${graph.y}px`, "--zoom": graph.scale, "--tilt": `${graph.tilt || 0}deg` }}>
-              <TopicTreeGraph rootTopics={visibleRootTopics} activeTopic={activeTopic} topicNodesById={pageData.topicNodesById || {}} showNeuronDetail={Number(graph.scale || 1) >= 0.88} onMoveToTopic={onMoveToTopic} onOpenNodeDetail={onOpenNodeDetail} />
+              <TopicTreeGraph rootTopics={visibleRootTopics} activeTopic={activeTopic} topicNodesById={pageData.topicNodesById || {}} showNeuronDetail={Number(graph.scale || 1) >= 0.88} hideNeurons={hideGraphNeurons} onMoveToTopic={onMoveToTopic} onOpenNodeDetail={onOpenNodeDetail} />
             </div>
+            <button
+              className={`neuron-visibility-toggle ${hideGraphNeurons ? "is-hidden-mode" : ""}`}
+              type="button"
+              aria-pressed={hideGraphNeurons}
+              onClick={() => setHideGraphNeurons((current) => !current)}
+            >
+              <Icon name={hideGraphNeurons ? "file" : "synapse"} />
+              <span>{hideGraphNeurons ? "뉴런 표시" : "뉴런 숨기기"}</span>
+            </button>
             {hasActiveTopic && canGenerateQuiz && (
               <div className="quiz-manage-panel" aria-live="polite">
                 <button className="quiz-manage-create" type="button" onClick={onGenerateQuiz} disabled={quizState.isGenerating || quizLimitReached}>

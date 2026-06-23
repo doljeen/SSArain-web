@@ -774,6 +774,45 @@ button {
   transition: transform 720ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.neuron-visibility-toggle {
+  position: absolute;
+  left: 18px;
+  top: 18px;
+  z-index: 36;
+  height: 40px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #dfe7f2;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #334155;
+  font-size: 13px;
+  font-weight: 900;
+  box-shadow: 0 10px 26px rgba(37, 50, 70, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+.neuron-visibility-toggle:hover {
+  border-color: #cbd5ff;
+  background: #ffffff;
+  color: var(--color-purple-strong);
+  box-shadow: 0 14px 30px rgba(101, 87, 255, 0.15);
+}
+
+.neuron-visibility-toggle.is-hidden-mode {
+  border-color: rgba(101, 87, 255, 0.28);
+  background: #f3f1ff;
+  color: var(--color-purple-strong);
+}
+
+.neuron-visibility-toggle .icon {
+  width: 17px;
+  height: 17px;
+}
+
 .topic-map {
   position: absolute;
   left: 50%;
