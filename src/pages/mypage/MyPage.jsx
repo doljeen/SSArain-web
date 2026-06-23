@@ -62,7 +62,13 @@ const formatActivityDate = (value) => {
 
 const getActivityTotal = (page) => Number(page?.totalElements ?? page?.activities?.length ?? 0);
 
-const getNeuronRoute = (activity) => activity?.nid ? `/nodes/${activity.nid}` : (activity?.tid ? `/topics/${activity.tid}/posts` : "/main");
+const getNeuronRoute = (activity) => {
+  if (activity?.bid && activity?.tid && activity?.nid) return `/brains/${activity.bid}/topics/${activity.tid}/nodes/${activity.nid}`;
+  if (activity?.bid && activity?.tid) return `/brains/${activity.bid}/topics/${activity.tid}/posts`;
+  if (activity?.nid) return `/nodes/${activity.nid}`;
+  if (activity?.tid) return `/topics/${activity.tid}/posts`;
+  return "/main";
+};
 
 const normalizeNeuronActivities = (page, emptyLabel, metaPrefix = "작성일") => ({
   count: getActivityTotal(page),
@@ -186,7 +192,7 @@ export default function MyPage() {
           sessionStorage.setItem(AUTH_STATE_KEY, "true");
           setUser(normalizeUserInfo(userInfo));
         }
-        await loadActivities();
+        loadActivities();
       } catch (error) {
         if (isAuthError(error)) {
           sessionStorage.removeItem(AUTH_STATE_KEY);

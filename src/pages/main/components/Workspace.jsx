@@ -27,8 +27,8 @@ const rootScatterPositions = [
 const topicBlockerForNode = (topicNode) => {
   const isRoot = topicNode.depth == null;
   const isSmall = topicNode.depth > 1;
-  const width = isRoot ? 230 : isSmall ? 240 : 260;
-  const height = isRoot ? 230 : isSmall ? 142 : 156;
+  const width = isRoot ? 260 : isSmall ? 240 : 260;
+  const height = isRoot ? 260 : isSmall ? 142 : 156;
 
   return {
     topicId: String(topicNode.topic.id),
@@ -52,6 +52,41 @@ const rectsOverlap = (first, second) => (
   && first.top < second.bottom
   && first.bottom > second.top
 );
+
+const getOverlapOffset = (first, second) => {
+  if (!rectsOverlap(first, second)) return null;
+  return {
+    x: Math.min(first.right - second.left, second.right - first.left),
+    y: Math.min(first.bottom - second.top, second.bottom - first.top)
+  };
+};
+
+const resolveTopicNodeCollisions = (rootNodes, descendantNodes) => {
+  const nodes = [...rootNodes, ...descendantNodes].sort((first, second) => (first.depth || 0) - (second.depth || 0));
+
+  descendantNodes.forEach((node) => {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const nodeRect = topicBlockerForNode(node);
+      const blocker = nodes.find((candidate) => candidate !== node && rectsOverlap(nodeRect, topicBlockerForNode(candidate)));
+      if (!blocker) break;
+
+      const blockerRect = topicBlockerForNode(blocker);
+      const overlap = getOverlapOffset(nodeRect, blockerRect);
+      if (!overlap) break;
+
+      const dx = node.x - blocker.x;
+      const dy = node.y - blocker.y;
+      const pushX = dx === 0 ? (node.side || 1) : Math.sign(dx);
+      const pushY = dy === 0 ? ((node.depth || 1) % 2 === 0 ? 1 : -1) : Math.sign(dy);
+
+      if (overlap.x < overlap.y) {
+        node.x += pushX * (overlap.x + 44);
+      } else {
+        node.y += pushY * (overlap.y + 44);
+      }
+    }
+  });
+};
 
 const findOpenNeuronPosition = ({ topicNode, angle, radius, blockers, width, height }) => {
   const angleOffsets = [0, 0.28, -0.28, 0.56, -0.56, 0.84, -0.84, 1.12, -1.12, 1.4, -1.4, 1.68, -1.68];
@@ -132,6 +167,8 @@ const collectTopicMap = (rootTopics, activeTopicId) => {
   rootNodes.forEach((rootNode) => {
     layoutChildren(rootNode.topic, rootNode);
   });
+
+  resolveTopicNodeCollisions(rootNodes, descendantNodes);
 
   return { rootNodes, descendantNodes, links, selectedTopic };
 };

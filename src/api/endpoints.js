@@ -47,12 +47,19 @@ export const endpoints = {
     members: (brainId, page = 0, size = 9) => `/brains/${brainId}/users?${query({ page, size })}`,
     changeUserRole: (brainId, userId) => `/brains/${brainId}/users/${userId}/role`,
     registerTopics: (brainId) => `/brains/${brainId}/topics`,
-    topics: (brainId) => `/brains/${brainId}/topics`,
+    topics: (brainId, options = {}) => {
+      const params = {};
+      if (options.tid != null && options.tid !== "") params.tid = options.tid;
+      if (options.depth != null && options.depth !== "") params.depth = options.depth;
+      const search = query(params);
+      return `/brains/${brainId}/topics${search ? `?${search}` : ""}`;
+    },
     topicDetail: (brainId, topicId) => `/brains/${brainId}/topics/${topicId}`
   },
   // Topic 트리 조회/상세/생성/수정/삭제 엔드포인트입니다.
   topics: {
     list: (brainId) => `/topics${brainId ? `?${query({ brain: brainId })}` : ""}`,
+    searchParents: (name, brainId) => `/topics/parents?${query({ name, brain: brainId })}`,
     children: (topicId, brainId) => `/topics/${topicId}/child${brainId ? `?${query({ brain: brainId })}` : ""}`,
     detail: (topicId) => `/topics/${topicId}`,
     create: (parentTopicId) => parentTopicId == null ? "/topics" : `/topics/${parentTopicId}`,
@@ -121,7 +128,8 @@ export const endpointMeta = {
     detail: { code: "T03", method: "GET" },
     create: { code: "T04", method: "POST" },
     update: { code: "T05", method: "PATCH" },
-    remove: { code: "T06", method: "DELETE" }
+    remove: { code: "T06", method: "DELETE" },
+    searchParents: { code: "T07", method: "GET" }
   },
   nodes: {
     preview: { code: "N01", method: "GET" },

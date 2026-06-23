@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { endpoints } from "../../../api/endpoints.js";
 import Icon from "../../../shared/icons/Icon.jsx";
 
-// Topic 트리의 모든 id를 모아서 새로 불러온 하위 Topic도 기본으로 펼쳐지게 합니다.
+// Topic 트리의 id 변화를 감지해 Brain/Topic이 바뀔 때 펼침 상태를 초기화합니다.
 const collectTopicIds = (topics = []) => topics.flatMap((topic) => [
   String(topic.id),
   ...collectTopicIds(topic.children || [])
@@ -27,11 +27,11 @@ export default function Sidebar({
 }) {
   const topicIds = useMemo(() => collectTopicIds(pageData.topics), [pageData.topics]);
   const topicIdsKey = topicIds.join("|");
-  const [expandedTopicIds, setExpandedTopicIds] = useState(() => new Set(topicIds));
+  const [expandedTopicIds, setExpandedTopicIds] = useState(() => new Set());
 
-  // Brain/Topic 목록이 바뀌면 현재 보유한 Topic은 모두 펼쳐서 최하위까지 바로 확인할 수 있게 합니다.
+  // Brain/Topic 목록이 바뀌면 기본은 접힌 상태로 시작합니다.
   useEffect(() => {
-    setExpandedTopicIds(new Set(topicIds));
+    setExpandedTopicIds(new Set());
   }, [topicIdsKey]);
 
   const toggleTopicExpanded = (event, topicId) => {
