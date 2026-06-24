@@ -49,6 +49,7 @@ export const endpoints = {
     members: (brainId, page = 0, size = 9) => `/brains/${brainId}/users?${query({ page, size })}`,
     changeUserRole: (brainId, userId) => `/brains/${brainId}/users/${userId}/role`,
     registerTopics: (brainId) => `/brains/${brainId}/topics`,
+    removeTopics: (brainId) => `/brains/${brainId}/topics`,
     topics: (brainId, options = {}) => {
       const params = {};
       if (options.tid != null && options.tid !== "") params.tid = options.tid;
@@ -119,6 +120,7 @@ export const endpointMeta = {
     joinRequests: { code: "B14", method: "GET" },
     manageJoin: { code: "B15", method: "POST" },
     registerTopics: { code: "B09", method: "POST" },
+    removeTopics: { code: "B11", method: "DELETE" },
     topics: { code: "B10", method: "GET" },
     topicDetail: { code: "B16", method: "GET" },
     members: { code: "B17", method: "GET" },

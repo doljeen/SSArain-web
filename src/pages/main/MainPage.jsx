@@ -592,19 +592,30 @@ export default function MainPage() {
   const syncVisibleTopics = (catalog, preferredTopicId = null) => {
     const visibleTopics = visibleTopicTree(catalog);
     const visibleFlat = flattenTopics(visibleTopics);
+    const visibleTopicIds = new Set(visibleFlat.map((topic) => String(topic.id)));
 
-    setPageData((current) => ({
-      ...current,
-      topics: visibleTopics,
-      activeTopicId: preferredTopicId && visibleFlat.some((topic) => String(topic.id) === String(preferredTopicId))
+    setPageData((current) => {
+      const nextActiveTopicId = preferredTopicId && visibleTopicIds.has(String(preferredTopicId))
         ? String(preferredTopicId)
-        : visibleFlat.some((topic) => String(topic.id) === String(current.activeTopicId))
+        : visibleTopicIds.has(String(current.activeTopicId))
         ? current.activeTopicId
-        : (visibleFlat[0] ? String(visibleFlat[0].id) : null),
-      nodes: visibleFlat.length ? current.nodes : [],
-      topicNodesById: visibleFlat.length ? current.topicNodesById || {} : {},
-      quizStatusByTopicId: visibleFlat.length ? current.quizStatusByTopicId || {} : {}
-    }));
+        : (visibleFlat[0] ? String(visibleFlat[0].id) : null);
+      const nextTopicNodesById = Object.fromEntries(
+        Object.entries(current.topicNodesById || {}).filter(([topicId]) => visibleTopicIds.has(String(topicId)))
+      );
+      const nextQuizStatusByTopicId = Object.fromEntries(
+        Object.entries(current.quizStatusByTopicId || {}).filter(([topicId]) => visibleTopicIds.has(String(topicId)))
+      );
+
+      return {
+        ...current,
+        topics: visibleTopics,
+        activeTopicId: nextActiveTopicId,
+        nodes: nextActiveTopicId ? nextTopicNodesById[String(nextActiveTopicId)] || [] : [],
+        topicNodesById: nextTopicNodesById,
+        quizStatusByTopicId: nextQuizStatusByTopicId
+      };
+    });
   };
 
   // 관리모드 Topic 패널에서 쓰는 공통 Topic Catalog를 가져옵니다.
@@ -2130,8 +2141,31 @@ export default function MainPage() {
 
   // B09/B10 기반 Topic 표시 토글입니다. 자식 숨김/부모 표시 규칙도 여기서 맞춥니다.
   const toggleTopicUse = async (topic) => {
+    if (!activeBrain?.id) return;
+
     const nextState = !isTopicUsing(topic.isUsing);
     const topicPathIds = nextState ? findTopicPathIds(topicCatalog, topic.id) : [String(topic.id)];
+
+    try {
+      if (nextState) {
+        await apiPost(endpoints.brains.registerTopics(activeBrain.id), { topics: topicPathIds.map(Number) });
+      } else {
+        try {
+          await apiDelete(endpoints.brains.removeTopics(activeBrain.id), { unsafe: false, topics: topicPathIds.map(Number) });
+        } catch (error) {
+          const hasNeuron = error.status === 409 || error.code === "B012";
+          if (!hasNeuron) throw error;
+
+          const confirmed = window.confirm("뉴런이 있는 Topic을 숨기면 해당 뉴런이 삭제됩니다. 그래도 숨기시겠습니까?");
+          if (!confirmed) return;
+
+          await apiDelete(endpoints.brains.removeTopics(activeBrain.id), { unsafe: true, topics: topicPathIds.map(Number) });
+        }
+      }
+    } catch (error) {
+      showToast(`${nextState ? "Topic 표시" : "Topic 숨김"} 실패 · ${error.message}`);
+      return;
+    }
 
     setTopicCatalog((current) => {
       const nextCatalog = markAncestorUsing(setTopicUseWithAncestors(current, topic.id, nextState));
@@ -2145,15 +2179,6 @@ export default function MainPage() {
           topics: markAncestorUsing(setTopicUseWithAncestors(current.topics, topic.id, nextState))
         }
       : current);
-
-    if (nextState && activeBrain) {
-      try {
-        await apiPost(endpoints.brains.registerTopics(activeBrain.id), { topics: topicPathIds.map(Number) });
-      } catch (error) {
-        showToast(`화면에는 표시했습니다 · Brain 등록 API 확인 필요`);
-        return;
-      }
-    }
 
     showToast(nextState ? `${topic.name} Topic 표시` : `${topic.name} Topic 숨김`);
   };
