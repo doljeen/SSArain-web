@@ -523,6 +523,10 @@ button {
   background: #ffffff;
 }
 
+.workspace.is-neuron-detail-view {
+  overflow: hidden;
+}
+
 /* Workspace 상단 Brain 탭: 여러 Brain을 브라우저 탭처럼 전환합니다. */
 .brain-tab-strip {
   height: 38px;
@@ -783,6 +787,14 @@ button {
 
 .graph-field.is-flying .graph-viewport {
   transition: transform 720ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.workspace.is-neuron-detail-view .graph-field {
+  overflow-y: auto;
+  overflow-x: hidden;
+  cursor: default;
+  user-select: auto;
+  touch-action: auto;
 }
 
 /* Synapse View - Neuron 표시 토글: Topic만 보고 싶을 때 Neuron을 숨깁니다. */
@@ -2086,6 +2098,13 @@ button {
   margin: 28px auto 0;
   overflow: auto;
   padding: 2px 4px 54px;
+}
+
+.workspace.is-neuron-detail-view .neuron-detail {
+  height: auto;
+  min-height: calc(100vh - 112px);
+  overflow: visible;
+  padding-bottom: 96px;
 }
 
 .neuron-back-button {

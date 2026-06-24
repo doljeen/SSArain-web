@@ -493,9 +493,10 @@ export default function Workspace({
     onSearchBrains(String(formData.get("brainKeyword") || "").trim(), 0, brainSearch.includeJoined);
   };
   const hasBrainTabs = isAuthenticated && openBrainTabs.length > 0;
+  const isNeuronDetailView = view === "posts" && hasActiveTopic && Boolean(nodeDetail?.isOpen);
 
   return (
-    <section className={`workspace ${hasBrainTabs ? "has-brain-tabs" : ""}`} aria-label="SSArain workspace">
+    <section className={`workspace ${hasBrainTabs ? "has-brain-tabs" : ""} ${isNeuronDetailView ? "is-neuron-detail-view" : ""}`} aria-label="SSArain workspace">
       {hasBrainTabs && (
         <nav className="brain-tab-strip" aria-label="열린 Brain 탭">
           <div className="brain-tabs" role="tablist">
@@ -552,7 +553,7 @@ export default function Workspace({
             <button className={`view-tab ${view === "posts" ? "is-active" : ""}`} type="button" role="tab" aria-selected={view === "posts"} onClick={(event) => { onRoute(event, activeTopic ? buildTopicRoute(activeTopic.id, "posts") : "/main/posts"); onSetView("posts"); }}><Icon name="list" /><span>Post List</span></button>
           </div>
           <button className="header-button" type="button" onClick={(event) => onRoute(event, isAuthenticated ? "/mypage" : "/login")}>{isAuthenticated ? "마이페이지" : "로그인"}</button>
-          <button className={`header-button notice-trigger ${isRightPanelOpen ? "is-open" : ""}`} type="button" onClick={(event) => { onRoute(event, "/notifications"); onToggleRight(); }} aria-pressed={isRightPanelOpen}><Icon name="bell" /><span>알림창</span></button>
+          <button className={`header-button notice-trigger ${isRightPanelOpen ? "is-open" : ""}`} type="button" onClick={onToggleRight} aria-pressed={isRightPanelOpen}><Icon name="bell" /><span>알림창</span></button>
         </div>
       </header>
 
