@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import Icon from "../../../shared/icons/Icon.jsx";
 
+// 관리모드의 "토픽 관리" 모달입니다.
+// 공통 Topic 트리를 검색하고, 현재 Brain에 표시/숨김 상태를 바꾸고, 새 하위 Topic을 생성합니다.
+
 const isTopicUsing = (value) => value === true || value === "true" || value === 1 || value === "1";
 const normalizeTopicName = (value) => String(value || "").trim().toLowerCase();
 
+// 생성 모달에서 선택한 부모 Topic을 찾기 위해 트리를 깊이 우선 탐색합니다.
 const findTopicById = (topics, topicId) => {
   for (const topic of topics) {
     if (String(topic.id) === String(topicId)) return topic;
@@ -13,6 +17,8 @@ const findTopicById = (topics, topicId) => {
   return null;
 };
 
+// Topic 생성 위치 선택 모달의 로컬 검색용 필터입니다.
+// 검색된 Topic만 단독으로 보여주지 않고, 부모-자식 맥락을 유지합니다.
 const filterTopicTreeByName = (topics, keyword) => {
   const normalizedKeyword = normalizeTopicName(keyword);
   if (!normalizedKeyword) return topics;
@@ -65,10 +71,12 @@ export default function TopicManagerPanel({
   const title = "토픽 관리";
   const copy = "토픽을 눌러 하위 토픽을 펼치고, 오른쪽 버튼으로 현재 Brain 표시 여부를 바꿀 수 있습니다.";
 
+  // 외부 검색 상태가 바뀌면 검색 input도 같은 값으로 동기화합니다.
   useEffect(() => {
     setSearchKeyword(search?.query || "");
   }, [search?.query]);
 
+  // Topic 관리 트리의 펼침 상태입니다. 검색 모드에서는 위치 확인을 위해 모두 펼쳐집니다.
   const toggleExpand = (topicId) => {
     setExpanded((current) => ({ ...current, [topicId]: !current[topicId] }));
   };
@@ -77,6 +85,7 @@ export default function TopicManagerPanel({
     setCreateExpanded((current) => ({ ...current, [topicId]: !current[topicId] }));
   };
 
+  // 새 Topic 생성은 별도 레이어에서 진행합니다. 부모 위치를 먼저 고르게 만드는 흐름입니다.
   const openCreateModal = () => {
     setIsCreateOpen(true);
     setCreateTarget(null);
@@ -100,6 +109,7 @@ export default function TopicManagerPanel({
     setCreateStatus("");
   };
 
+  // T07 검색 API를 호출하도록 MainPage에 검색어를 전달합니다.
   const submitSearch = (event) => {
     event.preventDefault();
     onSearchTopics?.(searchKeyword);
@@ -110,6 +120,7 @@ export default function TopicManagerPanel({
     onClearSearch?.();
   };
 
+  // T04 생성 API 호출 전, 같은 부모 아래 중복 이름은 프론트에서 먼저 차단합니다.
   const submitCreate = async (event) => {
     event.preventDefault();
     const name = topicName.trim();
@@ -130,6 +141,7 @@ export default function TopicManagerPanel({
     }
   };
 
+  // Topic 관리 본문 트리입니다. 오른쪽 버튼은 현재 Brain 표시/숨김 토글입니다.
   const renderTree = (items, depth = 0) => (
     <div className={`vertical-topic-level depth-${depth}`}>
       {items.map((topic) => {
@@ -180,6 +192,7 @@ export default function TopicManagerPanel({
     </div>
   );
 
+  // Topic 생성 모달의 부모 선택 트리입니다. 선택된 행 아래에 새 하위 Topic이 생성됩니다.
   const renderCreateTargetTree = (items, depth = 0) => (
     <div className={`topic-create-target-level depth-${depth}`}>
       {items.map((topic) => {
@@ -240,6 +253,7 @@ export default function TopicManagerPanel({
 
         <p className="topic-manager-copy">{copy}</p>
 
+        {/* T07 검색 영역: 검색 결과는 조상 Topic까지 펼쳐서 위치를 보여줍니다. */}
         <form className="topic-search-form" onSubmit={submitSearch}>
           <label className="topic-search-label" htmlFor="topic-manager-search">토픽 검색</label>
           <div className="topic-search-row">
@@ -260,12 +274,14 @@ export default function TopicManagerPanel({
           )}
         </form>
 
+        {/* 공통 Topic 트리 본문입니다. 표시/숨김은 B09/B10 상태와 맞춰 MainPage에서 처리합니다. */}
         <div className="topic-manager-scroll">
           {topicsToRender.length
             ? renderTree(topicsToRender)
             : <p className="topic-manager-empty">{isLoading || search?.isLoading ? "토픽을 불러오는 중입니다." : isSearchMode ? "검색 결과가 없습니다." : "등록된 공통 토픽이 없습니다."}</p>}
         </div>
 
+        {/* Topic 추가 레이어입니다. 부모 위치 선택과 이름 입력을 분리해 실수를 줄입니다. */}
         {isCreateOpen && (
           <div className="topic-create-layer" role="presentation">
             <form className="topic-create-card" onSubmit={submitCreate}>

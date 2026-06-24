@@ -1,3 +1,4 @@
+/* MainPage 전체 레이아웃: 왼쪽 Sidebar, 중앙 Workspace, 오른쪽 InsightsPanel을 3열로 배치합니다. */
 .main-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width, 292px) minmax(620px, 1fr) 328px;
@@ -11,6 +12,7 @@
   grid-template-columns: var(--sidebar-width, 292px) minmax(620px, 1fr) 0;
 }
 
+/* 공통 버튼/아이콘 기본값입니다. 각 기능별 버튼은 아래 섹션에서 다시 스타일링합니다. */
 button {
   background: transparent;
   color: inherit;
@@ -35,6 +37,7 @@ button {
   stroke-linejoin: round;
 }
 
+/* Sidebar: Brain 목록, Topic 트리, 사용자 메뉴가 들어가는 왼쪽 고정 탐색 영역입니다. */
 .sidebar {
   position: relative;
   min-width: 0;
@@ -185,6 +188,7 @@ button {
   color: #16a34a;
 }
 
+/* Sidebar - MY BRAINS: 사용자가 소속된 Brain 목록과 생성/찾기 버튼입니다. */
 .brain-list {
   padding: 18px 20px 16px;
   border-bottom: 1px solid #edf2f8;
@@ -282,6 +286,7 @@ button {
   color: #334155;
 }
 
+/* Sidebar - TOPICS: 현재 Brain의 Topic 트리를 접힘/펼침 폴더 구조로 보여줍니다. */
 .topics-card {
   flex: 1;
   padding: 18px 20px 20px;
@@ -407,6 +412,7 @@ button {
   background: #e7edf5;
 }
 
+/* Sidebar - 사용자 하단 영역: 마이페이지 진입과 로그아웃 버튼입니다. */
 .user-footer {
   min-height: 96px;
   padding: 14px 20px;
@@ -480,6 +486,7 @@ button {
   color: var(--color-purple-strong);
 }
 
+/* 비로그인 Sidebar: Brain 찾기만 노출하는 간단한 게스트 메뉴입니다. */
 .guest-sidebar-panel {
   flex: 1;
   min-height: 0;
@@ -507,6 +514,7 @@ button {
   color: #ffffff;
 }
 
+/* Workspace: 중앙 작업 화면입니다. Brain 탭, Header, Synapse/Post/Quiz/Neuron 상세가 이 안에 렌더링됩니다. */
 .workspace {
   position: relative;
   height: 100vh;
@@ -515,6 +523,7 @@ button {
   background: #ffffff;
 }
 
+/* Workspace 상단 Brain 탭: 여러 Brain을 브라우저 탭처럼 전환합니다. */
 .brain-tab-strip {
   height: 38px;
   padding: 6px 18px 0;
@@ -594,6 +603,7 @@ button {
   color: #334155;
 }
 
+/* Workspace Header: Breadcrumb, 관리모드, 보기 전환, 마이페이지, 알림 버튼입니다. */
 .workspace-header {
   min-width: 0;
   height: 68px;
@@ -738,6 +748,7 @@ button {
   box-shadow: 0 5px 14px rgba(37, 50, 70, 0.1);
 }
 
+/* Synapse View 바탕 영역: pan/zoom 이벤트를 받는 그래프 캔버스입니다. */
 .graph-field {
   position: absolute;
   inset: 68px 0 0;
@@ -774,6 +785,7 @@ button {
   transition: transform 720ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Synapse View - Neuron 표시 토글: Topic만 보고 싶을 때 Neuron을 숨깁니다. */
 .neuron-visibility-toggle {
   position: absolute;
   left: 18px;
@@ -813,6 +825,7 @@ button {
   height: 17px;
 }
 
+/* Synapse View - Topic 지도: Topic 노드와 연결선을 절대 좌표로 배치합니다. */
 .topic-map {
   position: absolute;
   left: 50%;
@@ -955,6 +968,7 @@ button {
   box-shadow: 0 10px 24px rgba(37, 50, 70, 0.08);
 }
 
+/* Synapse View - Neuron 미리보기: Topic 주변에 Neuron 점/카드를 배치합니다. */
 .neuron-map-link {
   position: absolute;
   left: 50%;
@@ -1159,6 +1173,7 @@ button {
   font-weight: 800;
 }
 
+/* Synapse View - 퀴즈 확인 CTA: 선택 Topic의 퀴즈 화면으로 이동합니다. */
 .quiz-floating-cta {
   position: absolute;
   right: 28px;
@@ -1190,6 +1205,7 @@ button {
   height: 17px;
 }
 
+/* 관리모드 - 퀴즈 생성 패널: Topic별 Gemini 기반 퀴즈 생성 액션입니다. */
 .quiz-manage-panel {
   position: absolute;
   right: 28px;
@@ -1258,6 +1274,7 @@ button {
   color: #be123c;
 }
 
+/* 관리모드 - 하단 액션 도크: Topic 관리처럼 Brain 편집에 필요한 관리자 도구를 띄웁니다. */
 .manage-action-dock {
   position: absolute;
   left: 50%;
@@ -1308,6 +1325,7 @@ button {
   height: 17px;
 }
 
+/* Brain 찾기 페이지: Brain 검색, 가입 요청/즉시 가입, 페이지네이션을 보여줍니다. */
 .brain-search-view {
   position: absolute;
   inset: 68px 0 0;
@@ -1550,6 +1568,7 @@ button {
   border: 1px solid #dfe7f2;
 }
 
+/* Post List View: 현재 Topic의 Neuron 목록, 검색, 최신순/인기순 정렬입니다. */
 .post-list {
   width: min(880px, calc(100% - 72px));
   height: calc(100% - 34px);
@@ -1782,6 +1801,7 @@ button {
   font-weight: 760;
 }
 
+/* Quiz View: Topic 퀴즈 풀이, 정답 확인, 해설 표시 화면입니다. */
 .quiz-view {
   width: min(980px, calc(100% - 72px));
   height: calc(100% - 34px);
@@ -2056,6 +2076,7 @@ button {
   color: var(--color-purple-strong);
 }
 
+/* Neuron 상세 페이지: 본문, 추천, 삭제, 댓글/답글 작성 영역입니다. */
 .neuron-detail {
   width: min(840px, calc(100% - 72px));
   height: calc(100% - 44px);
@@ -2203,6 +2224,7 @@ button {
   line-height: 1.9;
 }
 
+/* Neuron 상세 - 댓글 영역: 댓글 입력 form과 답글 트리를 렌더링합니다. */
 .neuron-comments {
   padding-top: 28px;
 }
@@ -2416,6 +2438,7 @@ button {
   text-align: center;
 }
 
+/* Neuron 생성 모달: 선택 Topic에 새 Neuron을 작성합니다. */
 .node-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -2731,6 +2754,7 @@ button {
   box-shadow: 0 3px 8px rgba(56, 76, 160, 0.14);
 }
 
+/* Synapse View - 확대/축소 컨트롤: 그래프 scale과 전체 보기 이동을 조작합니다. */
 .zoom-controls {
   position: absolute;
   left: 18px;
@@ -2763,6 +2787,7 @@ button {
   background: #f3f6fb;
 }
 
+/* InsightsPanel: 오른쪽 워크스페이스 인사이트, 알림, 최근 활동 패널입니다. */
 .insights-panel {
   height: 100vh;
   padding: 28px 24px;
@@ -3010,6 +3035,7 @@ button {
   height: 12px;
 }
 
+/* 전역 Toast: API 성공/실패 같은 짧은 상태 메시지를 화면 하단에 띄웁니다. */
 .toast {
   position: fixed;
   left: 50%;
@@ -3026,6 +3052,7 @@ button {
   box-shadow: 0 12px 28px rgba(17, 23, 43, 0.22);
 }
 
+/* Topic 관리 모달 Backdrop: 공통 Topic 트리 표시/숨김/검색/생성을 담당합니다. */
 .topic-manager-backdrop {
   position: fixed;
   inset: 0;
@@ -3037,6 +3064,7 @@ button {
   backdrop-filter: blur(8px);
 }
 
+/* Brain 관리 모달 Backdrop: Brain 정보, 멤버, 초대, 가입 요청, 삭제 기능을 담당합니다. */
 .brain-manager-backdrop {
   position: fixed;
   inset: 0;
@@ -3048,6 +3076,7 @@ button {
   backdrop-filter: blur(8px);
 }
 
+/* Brain 관리 모달 본문입니다. */
 .brain-manager-panel {
   width: min(1040px, calc(100vw - 56px));
   max-height: min(860px, calc(100vh - 56px));
@@ -3435,6 +3464,7 @@ button {
   cursor: not-allowed;
 }
 
+/* Topic 관리 모달 본문입니다. */
 .topic-manager-panel {
   position: relative;
   width: min(980px, calc(100vw - 56px));
@@ -3511,6 +3541,7 @@ button {
   background: rgba(244, 247, 255, 0.78);
 }
 
+/* Topic 관리 - T07 검색 영역: 검색된 Topic 위치를 조상 트리와 함께 보여줍니다. */
 .topic-search-form {
   padding: 16px 28px;
   display: grid;
@@ -3592,6 +3623,7 @@ button {
   overflow: auto;
 }
 
+/* Topic 관리 - 세로 트리: VSCode 폴더처럼 하위 Topic을 들여쓰기합니다. */
 .vertical-topic-level {
   position: relative;
   display: grid;
@@ -3806,6 +3838,7 @@ button {
   font-weight: 780;
 }
 
+/* Topic 추가 모달: 부모 Topic 선택과 새 Topic 이름 입력을 분리한 생성 화면입니다. */
 .topic-create-layer {
   position: fixed;
   inset: 0;
@@ -4119,6 +4152,7 @@ button {
   color: #e11d48;
 }
 
+/* 공통 간단 모달: 기존 생성/수정 확인에 쓰는 작은 dialog입니다. */
 .modal-backdrop {
   position: fixed;
   inset: 0;

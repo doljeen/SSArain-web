@@ -22,6 +22,7 @@ export const endpoints = {
     me: "/user",
     password: "/user/password",
     nameCheck: "/user/name-check",
+    search: (keyword = "", page = 0, size = 8) => `/user/search?${query({ keyword, page, size })}`,
     activities: {
       neurons: (page = 0, size = 10) => `/user/activities/neurons?${query({ page, size })}`,
       comments: (page = 0, size = 10) => `/user/activities/comments?${query({ page, size })}`,
@@ -154,7 +155,8 @@ export const endpointMeta = {
     nameCheck: { code: "U03", method: "POST" },
     writtenNeurons: { code: "U04", method: "GET" },
     writtenComments: { code: "U05", method: "GET" },
-    likedNeurons: { code: "U06", method: "GET" }
+    likedNeurons: { code: "U06", method: "GET" },
+    search: { code: "U07", method: "GET" }
   },
   notifications: {
     list: { code: "NO01", method: null }

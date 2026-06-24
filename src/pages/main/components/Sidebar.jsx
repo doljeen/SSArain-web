@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { endpoints } from "../../../api/endpoints.js";
 import Icon from "../../../shared/icons/Icon.jsx";
 
+// MainPage의 왼쪽 고정 영역입니다.
+// Brain 이동, Brain 관리 진입, Topic 트리 이동, 마이페이지/로그아웃 진입을 한곳에서 제공합니다.
+
 // Topic 트리의 id 변화를 감지해 Brain/Topic이 바뀔 때 펼침 상태를 초기화합니다.
 const collectTopicIds = (topics = []) => topics.flatMap((topic) => [
   String(topic.id),
@@ -34,6 +37,7 @@ export default function Sidebar({
     setExpandedTopicIds(new Set());
   }, [topicIdsKey]);
 
+  // 사이드바 Topic 트리는 기본 접힘 상태이며, 폴더 화살표로 하위 Topic만 펼칩니다.
   const toggleTopicExpanded = (event, topicId) => {
     event.stopPropagation();
     setExpandedTopicIds((current) => {
@@ -45,6 +49,7 @@ export default function Sidebar({
     });
   };
 
+  // VSCode 파일 탐색기처럼 Topic 계층을 재귀 렌더링합니다.
   const renderTopicTree = (topics = [], depth = 0) => topics.map((topic) => {
     const children = topic.children || [];
     const hasChildren = children.length > 0;

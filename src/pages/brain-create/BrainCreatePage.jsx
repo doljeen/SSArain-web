@@ -13,6 +13,15 @@ const normalizeBrainUser = (user) => ({
   email: user?.email || ""
 });
 
+const normalizeUserSearchPage = (page = {}, requestedPage = 0) => ({
+  users: (page.users || page.content || page.data || []).map(normalizeBrainUser).filter((user) => user.id),
+  currentPage: Number(requestedPage || 0),
+  pageSize: Number(page.pageSize || 8),
+  totalElements: Number(page.totalElements || 0),
+  totalPages: Number(page.totalPages || 0),
+  hasNext: Boolean(page.hasNext)
+});
+
 export default function BrainCreatePage() {
   // BrainCreateDto와 화면 전용 초대 멤버 상태입니다.
   const [form, setForm] = useState({
@@ -22,6 +31,16 @@ export default function BrainCreatePage() {
     memberKeyword: ""
   });
   const [members, setMembers] = useState([]);
+  const [memberSearch, setMemberSearch] = useState({
+    users: [],
+    currentPage: 0,
+    pageSize: 8,
+    totalElements: 0,
+    totalPages: 0,
+    hasNext: false,
+    isLoading: false,
+    message: ""
+  });
   const [status, setStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCheckingName, setIsCheckingName] = useState(false);
@@ -75,60 +94,53 @@ export default function BrainCreatePage() {
     }
   };
 
-  // 입력한 이름/이메일을 생성 이후 Brain 초대 후보 검색 API에 사용할 목록으로 보관합니다.
-  const addMember = () => {
+  const searchMembers = async (page = 0) => {
     const keyword = form.memberKeyword.trim();
-    if (!keyword) return;
-    setMembers((current) => current.includes(keyword) ? current : [...current, keyword]);
-    setForm((current) => ({ ...current, memberKeyword: "" }));
+    if (!keyword) {
+      setMemberSearch((current) => ({ ...current, users: [], message: "검색어를 입력해주세요." }));
+      return;
+    }
+
+    setMemberSearch((current) => ({ ...current, isLoading: true, message: "" }));
+
+    try {
+      const result = normalizeUserSearchPage(await apiGet(endpoints.users.search(keyword, page, memberSearch.pageSize)), page);
+      setMemberSearch({
+        ...result,
+        isLoading: false,
+        message: result.users.length ? "" : "검색 결과가 없습니다."
+      });
+    } catch (error) {
+      setMemberSearch((current) => ({
+        ...current,
+        users: [],
+        isLoading: false,
+        message: `사용자 검색 실패 · ${error.message}`
+      }));
+    }
   };
 
   const removeMember = (member) => {
-    setMembers((current) => current.filter((item) => item !== member));
+    setMembers((current) => current.filter((item) => String(item.id) !== String(member.id)));
   };
 
-  const findInviteTarget = async (brainId, keyword) => {
-    // B12 API로 현재 Brain에 아직 소속되지 않은 사용자를 검색합니다.
-    const result = await apiGet(endpoints.brains.availableUsers(brainId, keyword, 0, 5));
-    const candidates = (result?.users || []).map(normalizeBrainUser).filter((user) => user.id);
-    return (
-      candidates.find((user) => user.email === keyword || user.name === keyword)
-      || candidates[0]
-      || null
-    );
+  const addMember = (member) => {
+    setMembers((current) => (
+      current.some((item) => String(item.id) === String(member.id))
+        ? current
+        : [...current, member]
+    ));
   };
 
   const inviteMembers = async (brainId) => {
-    const keywords = [...new Set(members.map((member) => member.trim()).filter(Boolean))];
-    if (!keywords.length) {
-      return { addedCount: 0, failedKeywords: [] };
-    }
-
-    const foundUserIds = [];
-    const failedKeywords = [];
-
-    // 각 입력값을 실제 사용자 UUID로 변환합니다. 이름 검색은 중복 가능성이 있어 첫 번째 결과를 사용합니다.
-    for (const keyword of keywords) {
-      try {
-        const target = await findInviteTarget(brainId, keyword);
-        if (target) {
-          foundUserIds.push(target.id);
-        } else {
-          failedKeywords.push(keyword);
-        }
-      } catch {
-        failedKeywords.push(keyword);
-      }
-    }
-
-    const users = [...new Set(foundUserIds)];
+    const users = [...new Set(members.map((member) => member.id).filter(Boolean))];
     if (!users.length) {
-      return { addedCount: 0, failedKeywords };
+      return { addedCount: 0, failedKeywords: [] };
     }
 
     // B02 API는 UUID 배열을 users 키로 받습니다.
     await apiPost(endpoints.brains.addUsers(brainId), { users });
-    return { addedCount: users.length, failedKeywords };
+    return { addedCount: users.length, failedKeywords: [] };
   };
 
   const submit = async (event) => {
@@ -162,13 +174,13 @@ export default function BrainCreatePage() {
     try {
       await apiGet(endpoints.users.me);
       const created = await apiPost(endpoints.brains.create, payload);
-      const brainId = String(created?.id);
+      const brainId = String(created?.id ?? created?.bid ?? created?.brainId ?? "");
       let inviteResult = { addedCount: 0, failedKeywords: [] };
 
       try {
         inviteResult = await inviteMembers(brainId);
       } catch {
-        inviteResult = { addedCount: 0, failedKeywords: members };
+        inviteResult = { addedCount: 0, failedKeywords: members.map((member) => member.email || member.name) };
       }
 
       const workspace = {
@@ -251,9 +263,61 @@ export default function BrainCreatePage() {
           <div className="member-search-row">
             <label>
               <span>초대할 멤버 검색</span>
-              <input name="memberKeyword" type="text" value={form.memberKeyword} onChange={updateField} placeholder="이름 또는 이메일" />
+              <input
+                name="memberKeyword"
+                type="search"
+                value={form.memberKeyword}
+                onChange={(event) => {
+                  updateField(event);
+                  setMemberSearch((current) => ({ ...current, message: "", users: [] }));
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    searchMembers(0);
+                  }
+                }}
+                placeholder="이름 또는 이메일"
+              />
             </label>
-            <button type="button" onClick={addMember}>추가</button>
+            <button type="button" onClick={() => searchMembers(0)} disabled={memberSearch.isLoading}>
+              {memberSearch.isLoading ? "검색 중" : "검색"}
+            </button>
+          </div>
+
+          <div className="member-search-results" aria-live="polite">
+            <div className="member-search-results-head">
+              <strong>검색 결과</strong>
+              {memberSearch.totalElements > 0 && <span>{memberSearch.totalElements}명</span>}
+            </div>
+            {memberSearch.users.length ? (
+              <ul>
+                {memberSearch.users.map((user) => {
+                  const isSelected = members.some((member) => String(member.id) === String(user.id));
+                  return (
+                    <li key={user.id}>
+                      <span className="member-result-avatar">{(user.name || "U").slice(0, 1)}</span>
+                      <span>
+                        <strong>{user.name || "이름 없음"}</strong>
+                        <small>{user.email}</small>
+                      </span>
+                      <button type="button" onClick={() => addMember(user)} disabled={isSelected}>
+                        {isSelected ? "추가됨" : "추가"}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p>{memberSearch.message || "이름 또는 이메일로 사용자를 검색해주세요."}</p>
+            )}
+            {memberSearch.totalPages > 1 && (
+              <div className="member-search-pagination">
+                <button type="button" disabled={memberSearch.isLoading || memberSearch.currentPage <= 0} onClick={() => searchMembers(memberSearch.currentPage - 1)}>이전</button>
+                <span>{memberSearch.currentPage + 1} / {memberSearch.totalPages}</span>
+                <button type="button" disabled={memberSearch.isLoading || !memberSearch.hasNext} onClick={() => searchMembers(memberSearch.currentPage + 1)}>다음</button>
+              </div>
+            )}
           </div>
 
           <div className="selected-members">
@@ -261,9 +325,9 @@ export default function BrainCreatePage() {
             {members.length ? (
               <ul>
                 {members.map((member) => (
-                  <li key={member}>
-                    <span>{member}</span>
-                    <button type="button" onClick={() => removeMember(member)} aria-label={`${member} 제거`}>×</button>
+                  <li key={member.id}>
+                    <span>{member.name || member.email}</span>
+                    <button type="button" onClick={() => removeMember(member)} aria-label={`${member.name || member.email} 제거`}>×</button>
                   </li>
                 ))}
               </ul>

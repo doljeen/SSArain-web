@@ -12,6 +12,10 @@ import Workspace from "./components/Workspace.jsx";
 import { createModalCopy } from "./config/modalConfig.js";
 import { buildTopicTree, clone, flattenTopics, normalizeBrain, normalizeComments, normalizeNodeDetail, normalizeNodes, normalizeQuizzes, normalizeUserInfo } from "./config/mainUtils.js";
 
+// SSArain의 메인 페이지 컨트롤러입니다.
+// 왼쪽 Sidebar, 중앙 Workspace, 오른쪽 InsightsPanel에 필요한 상태와 API 호출을 이 파일에서 조율합니다.
+
+// 브라우저 저장소에 남겨둘 UI/세션 상태 key입니다.
 const CREATED_WORKSPACE_KEY = "ssarain-created-workspace";
 const AUTH_STATE_KEY = "ssarain-authenticated";
 const QUIZ_GENERATION_COUNTS_KEY = "ssarain-quiz-generation-counts";
@@ -27,6 +31,7 @@ const NODE_CONTENT_BYTE_LIMIT = 20000;
 const BRAIN_TOPIC_TREE_DEPTH = 5;
 const textEncoder = new TextEncoder();
 
+// Brain 관리 모달의 초기 상태입니다. Brain 정보, 멤버, 초대 가능 사용자, 가입 요청을 한꺼번에 관리합니다.
 const emptyBrainManager = {
   isOpen: false,
   isLoading: false,
@@ -40,6 +45,7 @@ const emptyBrainManager = {
   message: ""
 };
 
+// 화면 전체에서 공유하는 기본 데이터입니다. WAS 응답 전에는 빈 상태로 렌더링합니다.
 const emptyPageData = {
   user: { name: "", email: "", role: "" },
   activeBrainId: null,
@@ -53,6 +59,7 @@ const emptyPageData = {
   activities: []
 };
 
+// 그래프 pan/zoom 값이 화면 밖으로 너무 튀지 않도록 제한합니다.
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const clampGraph = (graphState) => ({
@@ -70,6 +77,7 @@ const clampGraph = (graphState) => ({
   )
 });
 
+// 현재 URL에서 Brain/Topic/Neuron id와 view 모드를 읽어 화면 상태로 복원합니다.
 const getTopicIdFromRoute = (path) => {
   const match = path.match(/^\/brains\/[^/]+\/topics\/([^/]+)/) || path.match(/^\/topics\/([^/]+)/);
   return match ? decodeURIComponent(match[1]) : null;
@@ -93,6 +101,7 @@ const buildTopicRoute = (brainId, topicId, routeView = "synapse") => (
 const buildNodeRoute = (brainId, topicId, nodeId) => (
   brainId && topicId ? `/brains/${brainId}/topics/${topicId}/nodes/${nodeId}` : `/nodes/${nodeId}`
 );
+// Brain 권한은 USER/MANAGER/ADMIN 값을 화면 라벨과 기능 권한으로 변환합니다.
 const normalizeRoleValue = (role) => String(role || "").trim().toUpperCase();
 const ROLE_LABELS = { USER: "일반학생", MANAGER: "반장", ADMIN: "관리자" };
 const MANAGE_ROLE_NAMES = ["ADMIN", "MANAGER"];
@@ -100,6 +109,7 @@ const ADMIN_ROLE_NAMES = ["ADMIN"];
 const canUseManageMode = (role) => MANAGE_ROLE_NAMES.includes(normalizeRoleValue(role));
 const canAdministerRole = (role) => ADMIN_ROLE_NAMES.includes(normalizeRoleValue(role));
 
+// Neuron 본문은 WAS 제한에 맞춰 byte 단위로 길이를 계산합니다.
 const getByteLength = (value) => textEncoder.encode(value || "").length;
 
 const truncateToByteLimit = (value, limit) => {
@@ -126,6 +136,7 @@ const normalizeErrorMessage = (message) => {
   }
   return text;
 };
+// Brain 정보 갱신 시 서버 응답에 role이 빠져도 기존 관리 권한을 잃지 않게 보존합니다.
 const pickPreservedBrainRole = (...roles) => {
   const normalizedRoles = roles.map(normalizeRoleValue).filter(Boolean);
   return normalizedRoles.find(canUseManageMode) || normalizedRoles[0] || "";
@@ -135,6 +146,7 @@ const mergeBrainPreservingRole = (brain, incoming) => {
   return { ...brain, ...incoming, role, brainRole: role };
 };
 const isTopicUsing = (value) => value === true || value === "true" || value === 1 || value === "1";
+// WAS 멤버 DTO의 role 필드명이 상황마다 달라질 수 있어 가능한 후보를 모두 읽습니다.
 const pickBrainUserRole = (source = {}) => {
   const role =
     source.brainRole ??
@@ -162,8 +174,35 @@ const normalizeBrainUser = (user = {}, fallbackRole = "") => {
   };
 };
 
+const pickUserListFromPage = (page = {}) => page.users || page.content || page.members || page.data || [];
+
+// B17 멤버 목록 응답을 화면 멤버 카드에서 쓰는 구조로 정리합니다.
+// B17에 추가된 brainRole을 최우선으로 사용해야, B19 권한 변경 후 관리창을 다시 열어도 변경된 권한이 유지됩니다.
+const normalizeBrainMemberPage = (page = {}, roleFallbackUsers = []) => {
+  const users = pickUserListFromPage(page);
+  const roleById = new Map(roleFallbackUsers.map((user) => [String(user.id), user.brainRole || user.role]).filter(([id, role]) => id && role));
+  const roleByEmail = new Map(roleFallbackUsers.map((user) => [
+    String(user.email || "").trim().toLowerCase(),
+    user.brainRole || user.role
+  ]).filter(([email, role]) => email && role));
+
+  return (Array.isArray(users) ? users : []).map((user) => {
+    const id = String(user.UUID || user.uuid || user.uid || user.id || user.userId || user.memberId || "");
+    const email = String(user.email || user.userEmail || "").trim().toLowerCase();
+    const role = normalizeRoleValue(user.brainRole || roleById.get(id) || roleByEmail.get(email) || pickBrainUserRole(user) || "USER");
+    return {
+      id,
+      name: user.name || user.nickname || user.userName || "사용자",
+      email: user.email || user.userEmail || "",
+      role,
+      brainRole: role
+    };
+  }).filter((user) => user.id);
+};
+
+// B12/B14처럼 Brain 권한이 없는 사용자 목록은 기본 USER 권한으로 화면에 맞춥니다.
 const normalizeBrainUserPage = (page = {}, roleFallbackUsers = []) => {
-  const users = page.users || page.content || page.members || page.data || [];
+  const users = pickUserListFromPage(page);
   const roleById = new Map(roleFallbackUsers.map((user) => [String(user.id), user.brainRole || user.role]).filter(([id, role]) => id && role));
   const roleByEmail = new Map(roleFallbackUsers.map((user) => [
     String(user.email || "").trim().toLowerCase(),
@@ -182,6 +221,7 @@ const updateBrainUserRole = (users, userId, role) => users.map((user) => (
     : user
 ));
 const formatBrainRole = (role) => ROLE_LABELS[normalizeRoleValue(role)] || role || "일반학생";
+// Synapse 지도에서 최상위 Topic을 넓게 배치하기 위한 기본 좌표입니다.
 const rootScatterPositions = [
   { x: -1040, y: -420 },
   { x: 1080, y: 420 },
@@ -194,6 +234,7 @@ const rootScatterPositions = [
   { x: 1500, y: 720 }
 ];
 
+// Sidebar/Topic 클릭 시 Workspace 그래프의 실제 좌표로 카메라를 이동하기 위해 Topic 좌표를 계산합니다.
 const collectTopicLayoutPoints = (rootTopics) => {
   const points = [];
   const rootNodes = rootTopics.map((rootTopic, index) => {
@@ -231,6 +272,7 @@ const collectTopicLayoutPoints = (rootTopics) => {
   return points;
 };
 
+// Topic 트리의 표시/숨김, btid 갱신, 자식 추가를 불변 업데이트로 처리하는 헬퍼들입니다.
 const mapTopicTree = (topics, mapper) => topics.map((topic) => {
   const nextTopic = mapper(topic);
   return { ...nextTopic, children: mapTopicTree(nextTopic.children || [], mapper) };
@@ -320,6 +362,7 @@ const updateTopicBtid = (topics, topicId, btid) => topics.map((topic) => (
     : { ...topic, children: updateTopicBtid(topic.children || [], topicId, btid) }
 ));
 
+// T07 검색 결과는 경로 배열로 내려오므로, 검색 결과용 트리와 매칭 id 목록을 재구성합니다.
 const topicRawId = (topic) => topic?.tid ?? topic?.id;
 
 const buildTopicSearchTree = (paths = [], catalog = []) => {
@@ -345,6 +388,7 @@ const getTopicSearchMatchIds = (paths = []) => paths
   .map(String);
 
 export default function MainPage() {
+  // ===== 공통 화면 상태 =====
   // 화면 전체에서 쓰는 데이터입니다. WAS 응답 전에는 mock 대신 빈 상태를 보여줍니다.
   const [pageData, setPageData] = useState(() => clone(emptyPageData));
 
@@ -377,6 +421,8 @@ export default function MainPage() {
   const [flying, setFlying] = useState(false);
   const [panning, setPanning] = useState(false);
   const [manageMode, setManageMode] = useState(false);
+
+  // ===== Topic 관리/검색 상태 =====
   const [topicPanelMode, setTopicPanelMode] = useState(null);
   const [isTopicCatalogLoading, setIsTopicCatalogLoading] = useState(false);
   const [topicCatalog, setTopicCatalog] = useState([]);
@@ -389,6 +435,8 @@ export default function MainPage() {
     message: ""
   });
   const [openBrainTabs, setOpenBrainTabs] = useState([]);
+
+  // ===== Brain 관리/검색 상태 =====
   const [brainManager, setBrainManager] = useState(emptyBrainManager);
   const [brainSearch, setBrainSearch] = useState({
     query: "",
@@ -413,6 +461,7 @@ export default function MainPage() {
   const brainTabState = useRef({});
   const workspaceLoadSeq = useRef(0);
 
+  // ===== 현재 선택된 Brain/Topic과 권한 계산 =====
   // 트리 구조의 토픽을 펼쳐서 현재 선택된 Brain/Topic을 계산합니다.
   const topicsFlat = useMemo(() => flattenTopics(pageData.topics), [pageData.topics]);
   const nodeContentByteCount = useMemo(() => getByteLength(nodeDraft.content), [nodeDraft.content]);
@@ -444,6 +493,8 @@ export default function MainPage() {
   };
   const canDeleteNode = (node) => Boolean(node && (canAdministerWorkspace || isCurrentUserWriter(node.writer)));
 
+  // ===== Topic Catalog와 Brain 탭 캐시 =====
+  // Brain을 이동할 때 매번 전체 데이터를 기다리지 않도록 마지막 상태를 탭별로 기억합니다.
   const rememberTopicCatalog = (brainId, catalog) => {
     if (!brainId) return;
     topicCatalogByBrain.current[String(brainId)] = catalog;
@@ -525,6 +576,7 @@ export default function MainPage() {
     return true;
   };
 
+  // 공통 Topic Catalog에서 현재 Brain에 표시할 Topic만 걸러 Workspace 트리로 만듭니다.
   const syncVisibleTopics = (catalog, preferredTopicId = null) => {
     const visibleTopics = visibleTopicTree(catalog);
     const visibleFlat = flattenTopics(visibleTopics);
@@ -543,6 +595,7 @@ export default function MainPage() {
     }));
   };
 
+  // 관리모드 Topic 패널에서 쓰는 공통 Topic Catalog를 가져옵니다.
   const loadTopicCatalog = async () => {
     if (!activeBrain) return topicCatalog;
 
@@ -597,6 +650,7 @@ export default function MainPage() {
     return Object.fromEntries(entries);
   };
 
+  // 현재 화면에 보이는 Topic들만 퀴즈 생성 여부를 확인해 Q 배지를 붙입니다.
   const fetchVisibleTopicQuizStatuses = async (topics = []) => {
     const flatTopics = flattenTopics(topics).filter((topic) => topic?.btid);
     const entries = await Promise.all(flatTopics.map(async (topic) => {
@@ -611,6 +665,7 @@ export default function MainPage() {
     return Object.fromEntries(entries);
   };
 
+  // Brain 화면을 먼저 띄운 뒤, Neuron 미리보기와 퀴즈 배지는 백그라운드로 채웁니다.
   const hydrateVisibleTopicExtras = (brainId, visibleTopics = [], requestId = workspaceLoadSeq.current) => {
     window.setTimeout(async () => {
       try {
@@ -999,6 +1054,7 @@ export default function MainPage() {
     }
   };
 
+  // 앱 최초 진입과 브라우저 뒤로가기/앞으로가기에서 URL을 읽어 화면 상태를 복원합니다.
   useEffect(() => {
     // 첫 진입 시 route와 body data를 동기화하고 WAS 데이터를 불러옵니다.
     syncDocumentRoute(route);
@@ -1061,6 +1117,7 @@ export default function MainPage() {
     };
   }, []);
 
+  // route 문자열이 바뀌면 브라우저 주소창과 document 상태를 동기화합니다.
   useEffect(() => {
     if (!pageData.activeBrainId || authStatus !== "authenticated") return;
     const currentState = brainTabState.current[String(pageData.activeBrainId)] || {};
@@ -1861,6 +1918,7 @@ export default function MainPage() {
   const toggleRight = () => setRightCollapsed((value) => !value);
 
   // 관리모드에서 공통 Topic 트리를 열어 Brain별 표시 상태를 관리합니다.
+  // Topic 관리 버튼을 누르면 공통 Topic Catalog를 확보한 뒤 관리 모달을 엽니다.
   const openTopicPanel = () => {
     setTopicSearch({
       query: "",
@@ -1885,6 +1943,7 @@ export default function MainPage() {
     });
   };
 
+  // T07 Topic 검색 API: 검색된 Topic과 부모/조상 Topic 경로를 받아 트리로 보여줍니다.
   const searchTopicsFromPanel = async (keyword) => {
     const queryText = String(keyword || "").trim();
     if (!queryText) {
@@ -1938,6 +1997,7 @@ export default function MainPage() {
     }
   };
 
+  // T04 Topic 생성 API: 선택한 부모 Topic 아래에 새 Topic을 만들고 Catalog/화면 트리를 갱신합니다.
   const createTopicFromPanel = async (parentTopicId, name) => {
     try {
       const createdTopic = await apiPost(endpoints.topics.create(parentTopicId), { name });
@@ -1976,6 +2036,7 @@ export default function MainPage() {
     }
   };
 
+  // B09/B10 기반 Topic 표시 토글입니다. 자식 숨김/부모 표시 규칙도 여기서 맞춥니다.
   const toggleTopicUse = async (topic) => {
     const nextState = !isTopicUsing(topic.isUsing);
     const topicPathIds = nextState ? findTopicPathIds(topicCatalog, topic.id) : [String(topic.id)];
@@ -2005,6 +2066,7 @@ export default function MainPage() {
     showToast(nextState ? `${topic.name} Topic 표시` : `${topic.name} Topic 숨김`);
   };
 
+  // Brain 관리 모달 데이터 로드: Brain 정보, 현재 멤버, 초대 가능 사용자, 가입 요청을 병렬 조회합니다.
   const loadBrainManagerData = async (brainId, keyword = "") => {
     setBrainManager((current) => ({ ...current, isLoading: true, message: "" }));
 
@@ -2036,7 +2098,7 @@ export default function MainPage() {
         joinPolicy: brainInfo.joinPolicy || "PROTECTED"
       } : current.form,
       members: membersResult.status === "fulfilled"
-        ? normalizeBrainUserPage(membersResult.value, [...current.members, currentUserRoleFallback])
+        ? normalizeBrainMemberPage(membersResult.value, [...current.members, currentUserRoleFallback])
         : current.members,
       availableUsers: availableResult.status === "fulfilled" ? normalizeBrainUserPage(availableResult.value) : current.availableUsers,
       joinRequests: requestsResult.status === "fulfilled" ? normalizeBrainUserPage(requestsResult.value) : current.joinRequests,
@@ -2044,6 +2106,7 @@ export default function MainPage() {
     }));
   };
 
+  // B19 권한 변경 API: 관리자만 멤버를 일반학생/반장/관리자로 바꿀 수 있습니다.
   const changeBrainMemberRole = async (member, role) => {
     if (!brainManager.brain) return;
     const nextRole = normalizeRoleValue(role);
@@ -2117,6 +2180,7 @@ export default function MainPage() {
     }));
   };
 
+  // B07 Brain 정보 수정 API: 이름, 소개 문구, 가입 정책을 저장합니다.
   const saveBrainInfo = async () => {
     if (!brainManager.brain) return;
 
@@ -2187,6 +2251,7 @@ export default function MainPage() {
     await loadBrainManagerData(brainManager.brain.id, brainManager.searchKeyword);
   };
 
+  // B02 초대 API: 검색된 사용자를 현재 Brain 멤버로 추가합니다.
   const inviteBrainUser = async (user) => {
     if (!brainManager.brain) return;
 
@@ -2199,6 +2264,7 @@ export default function MainPage() {
     }
   };
 
+  // B03 멤버 삭제 API: 관리자 내보내기/권한 없음 같은 예외 메시지는 여기서 사용자에게 보여줍니다.
   const removeBrainMember = async (member) => {
     if (!brainManager.brain) return;
 
@@ -2211,6 +2277,7 @@ export default function MainPage() {
     }
   };
 
+  // B15 가입 요청 승인/거부 API입니다.
   const manageJoinRequest = async (request, isAccept) => {
     if (!brainManager.brain) return;
 
@@ -2226,6 +2293,7 @@ export default function MainPage() {
     }
   };
 
+  // B08 Brain 삭제 API입니다. 삭제 후에는 열린 탭과 현재 화면 상태를 정리합니다.
   const deleteBrain = async () => {
     if (!brainManager.brain) return;
 
@@ -2284,6 +2352,7 @@ export default function MainPage() {
     }
   };
 
+  // 왼쪽 Sidebar 폭 조절 시작 지점입니다. 실제 드래그 처리는 전역 pointermove effect에서 합니다.
   const startSidebarResize = (event) => {
     event.preventDefault();
     sidebarResizeSession.current = {
@@ -2312,6 +2381,7 @@ export default function MainPage() {
     routeTo("/main");
   };
 
+  // 실제 화면 조립: Sidebar / Workspace / InsightsPanel / 각종 모달을 연결합니다.
   return (
     <main className={`main-shell ${rightCollapsed ? "is-right-collapsed" : ""}`} style={{ "--sidebar-width": `${sidebarWidth}px` }} aria-label="SSArain main page">
       {/* 왼쪽 Brain/Topic 탐색 영역입니다. */}

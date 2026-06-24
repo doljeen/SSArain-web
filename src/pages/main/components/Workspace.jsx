@@ -1,6 +1,10 @@
 import { memo, useMemo, useState } from "react";
 import Icon from "../../../shared/icons/Icon.jsx";
 
+// MainPage의 중앙 작업 영역입니다.
+// Synapse 그래프, Post List, Quiz, Neuron 상세/댓글, Brain 검색 화면을 렌더링합니다.
+
+// 그래프의 Topic/Neuron 연결선을 CSS 변수로 그리기 위한 좌표 계산입니다.
 const lineStyle = (fromX, fromY, toX, toY) => {
   const dx = toX - fromX;
   const dy = toY - fromY;
@@ -12,6 +16,7 @@ const lineStyle = (fromX, fromY, toX, toY) => {
   };
 };
 
+// 최상위 Topic은 격자처럼 딱 맞추기보다 넓게 흩뿌려 Brain 전체 지도를 만듭니다.
 const rootScatterPositions = [
   { x: -1040, y: -420 },
   { x: 1080, y: 420 },
@@ -24,6 +29,7 @@ const rootScatterPositions = [
   { x: 1500, y: 720 }
 ];
 
+// Neuron 카드가 Topic 원/카드를 덮지 않도록 Topic 주변에 충돌 영역을 잡습니다.
 const topicBlockerForNode = (topicNode) => {
   const isRoot = topicNode.depth == null;
   const isSmall = topicNode.depth > 1;
@@ -39,6 +45,7 @@ const topicBlockerForNode = (topicNode) => {
   };
 };
 
+// 화면 좌표 기반 충돌 계산용 사각형 유틸입니다.
 const rectForPoint = (x, y, width, height) => ({
   left: x - (width / 2),
   right: x + (width / 2),
@@ -61,6 +68,7 @@ const getOverlapOffset = (first, second) => {
   };
 };
 
+// Topic끼리 겹칠 때 자식 Topic을 바깥으로 밀어 계층이 읽히게 합니다.
 const resolveTopicNodeCollisions = (rootNodes, descendantNodes) => {
   const nodes = [...rootNodes, ...descendantNodes].sort((first, second) => (first.depth || 0) - (second.depth || 0));
 
@@ -88,6 +96,7 @@ const resolveTopicNodeCollisions = (rootNodes, descendantNodes) => {
   });
 };
 
+// 선택된 Topic 주변에 Neuron 카드를 배치할 때 Topic/카드와 겹치지 않는 위치를 찾습니다.
 const findOpenNeuronPosition = ({ topicNode, angle, radius, blockers, width, height }) => {
   const angleOffsets = [0, 0.28, -0.28, 0.56, -0.56, 0.84, -0.84, 1.12, -1.12, 1.4, -1.4, 1.68, -1.68];
   const radiusOffsets = [0, 64, 128, 192, 256, 320];
@@ -111,6 +120,7 @@ const findOpenNeuronPosition = ({ topicNode, angle, radius, blockers, width, hei
   };
 };
 
+// Breadcrumb과 선택 Topic 강조를 위해 루트부터 선택 Topic까지의 경로를 찾습니다.
 const findTopicPath = (topics, topicId, path = []) => {
   for (const topic of topics) {
     const nextPath = [...path, topic];
@@ -121,6 +131,7 @@ const findTopicPath = (topics, topicId, path = []) => {
   return [];
 };
 
+// Topic 트리를 그래프 좌표, 연결선, 선택 경로 정보로 변환합니다.
 const collectTopicMap = (rootTopics, activeTopicId) => {
   const activePath = findTopicPath(rootTopics, activeTopicId);
   const activeRoot = activePath[0] || null;
@@ -173,12 +184,14 @@ const collectTopicMap = (rootTopics, activeTopicId) => {
   return { rootNodes, descendantNodes, links, selectedTopic };
 };
 
+// Synapse View의 실제 Topic/Neuron 지도입니다.
 const TopicTreeGraphComponent = ({ rootTopics, activeTopic, topicNodesById = {}, quizStatusByTopicId = {}, showNeuronDetail, hideNeurons, onMoveToTopic, onOpenNodeDetail }) => {
   const { rootNodes, descendantNodes, links, selectedTopic } = useMemo(
     () => collectTopicMap(rootTopics, activeTopic?.id),
     [rootTopics, activeTopic?.id]
   );
   const allTopicNodes = useMemo(() => [...rootNodes, ...descendantNodes], [rootNodes, descendantNodes]);
+  // 전체 Topic의 Neuron은 작은 점/제목으로, 선택 Topic의 Neuron은 확장 카드로 배치합니다.
   const positionedNeurons = useMemo(() => {
     if (hideNeurons) return [];
 
@@ -278,6 +291,7 @@ const TopicTreeGraphComponent = ({ rootTopics, activeTopic, topicNodesById = {},
   );
 };
 
+// 그래프는 렌더 비용이 커서 핵심 데이터가 바뀔 때만 다시 그립니다.
 const TopicTreeGraph = memo(TopicTreeGraphComponent, (prev, next) => (
   prev.rootTopics === next.rootTopics
   && String(prev.activeTopic?.id || "") === String(next.activeTopic?.id || "")
@@ -287,6 +301,7 @@ const TopicTreeGraph = memo(TopicTreeGraphComponent, (prev, next) => (
   && prev.hideNeurons === next.hideNeurons
 ));
 
+// 댓글/Neuron 작성일을 한국어 날짜 문자열로 표시합니다.
 const formatDate = (value) => {
   if (!value) return "";
   const date = new Date(value);
@@ -300,6 +315,7 @@ const formatDate = (value) => {
   }).format(date);
 };
 
+// flat 댓글 목록을 parentId 기준 트리로 바꿔 답글 들여쓰기를 만듭니다.
 const buildCommentTree = (comments = []) => {
   const commentMap = new Map();
   const roots = [];
@@ -377,15 +393,18 @@ export default function Workspace({
   onToggleManageMode,
   onToggleRight
 }) {
+  // Post List 검색/정렬, Synapse Neuron 표시 여부는 중앙 화면에서만 쓰는 UI 상태입니다.
   const [postQuery, setPostQuery] = useState("");
   const [postSort, setPostSort] = useState("latest");
   const [hideGraphNeurons, setHideGraphNeurons] = useState(false);
   const hasActiveTopic = Boolean(activeTopic);
   const visibleRootTopics = pageData.topics || [];
+  // 상단 Breadcrumb에 보여줄 현재 Topic 경로입니다.
   const topicBreadcrumb = useMemo(
     () => findTopicPath(visibleRootTopics, activeTopic?.id),
     [visibleRootTopics, activeTopic?.id]
   );
+  // Post List의 검색어와 최신순/인기순 정렬을 적용한 Neuron 목록입니다.
   const filteredNodes = useMemo(() => {
     const keyword = postQuery.trim().toLowerCase();
     const matchedNodes = keyword ? pageData.nodes.filter((node) => (
@@ -403,7 +422,9 @@ export default function Workspace({
       return new Date(secondNode.createdAt || 0).getTime() - new Date(firstNode.createdAt || 0).getTime();
     });
   }, [pageData.nodes, postQuery, postSort]);
+  // Neuron 상세 댓글은 답글 구조로 보여주기 위해 트리로 변환합니다.
   const commentTree = useMemo(() => buildCommentTree(nodeDetail?.data?.comments || []), [nodeDetail?.data?.comments]);
+  // 답글 작성/댓글 수정 중일 때 form 위에 대상 댓글을 표시합니다.
   const activeCommentTarget = useMemo(() => {
     if (!nodeDetail?.data || (!commentDraft.parentId && !commentDraft.editingId)) return null;
     const targetId = commentDraft.editingId || commentDraft.parentId;
@@ -425,6 +446,7 @@ export default function Workspace({
     return { correct, total: quizState.quizzes.length };
   }, [quizState?.answers, quizState?.quizzes]);
 
+  // 댓글 카드와 답글 카드를 같은 컴포넌트 구조로 재귀 렌더링합니다.
   const renderComment = (comment, depth = 0) => {
     const canEditComment = canModerateComments || (currentUserName && comment.writer === currentUserName);
 
@@ -458,6 +480,7 @@ export default function Workspace({
     );
   };
 
+  // Brain 찾기 화면의 검색 form 제출을 MainPage의 B05 검색 핸들러로 넘깁니다.
   const submitBrainSearch = (event) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
