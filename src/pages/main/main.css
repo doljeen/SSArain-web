@@ -4332,6 +4332,10 @@ button {
   color: #e11d48;
 }
 
+.topic-create-status.is-success {
+  color: #059669;
+}
+
 /* 공통 간단 모달: 기존 생성/수정 확인에 쓰는 작은 dialog입니다. */
 .modal-backdrop {
   position: fixed;

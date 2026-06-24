@@ -48,6 +48,7 @@ export default function TopicManagerPanel({
   const [createTarget, setCreateTarget] = useState(null);
   const [topicName, setTopicName] = useState("");
   const [createStatus, setCreateStatus] = useState("");
+  const [createStatusType, setCreateStatusType] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState(search?.query || "");
   const [createSearchKeyword, setCreateSearchKeyword] = useState("");
@@ -91,6 +92,7 @@ export default function TopicManagerPanel({
     setCreateTarget(null);
     setTopicName("");
     setCreateStatus("");
+    setCreateStatusType("");
     setCreateSearchKeyword("");
   };
 
@@ -99,6 +101,7 @@ export default function TopicManagerPanel({
     setCreateTarget(null);
     setTopicName("");
     setCreateStatus("");
+    setCreateStatusType("");
     setCreateSearchKeyword("");
     setIsCreating(false);
   };
@@ -107,6 +110,7 @@ export default function TopicManagerPanel({
     setCreateTarget(topic);
     setTopicName("");
     setCreateStatus("");
+    setCreateStatusType("");
   };
 
   // T07 검색 API를 호출하도록 MainPage에 검색어를 전달합니다.
@@ -127,16 +131,22 @@ export default function TopicManagerPanel({
     if (!name || !createTarget || isCreating) return;
     if (isDuplicateName) {
       setCreateStatus("같은 위치에 이미 같은 이름의 토픽이 있습니다.");
+      setCreateStatusType("error");
       return;
     }
 
     setIsCreating(true);
     setCreateStatus("");
+    setCreateStatusType("");
     try {
       await onCreateTopic(createTarget.id, name);
-      closeCreateModal();
+      setTopicName("");
+      setCreateStatus(`${name} 토픽이 생성되었습니다.`);
+      setCreateStatusType("success");
+      setIsCreating(false);
     } catch (error) {
       setCreateStatus(error.message || "토픽을 생성하지 못했습니다.");
+      setCreateStatusType("error");
       setIsCreating(false);
     }
   };
@@ -337,13 +347,14 @@ export default function TopicManagerPanel({
                       onChange={(event) => {
                         setTopicName(event.target.value);
                         setCreateStatus("");
+                        setCreateStatusType("");
                       }}
                       placeholder="예: 그리디"
                       disabled={!createTarget || isCreating}
                     />
                   </label>
                   {isDuplicateName && <p className="topic-create-status is-error">같은 부모 아래에 이미 같은 이름의 토픽이 있습니다.</p>}
-                  {createStatus && <p className="topic-create-status is-error">{createStatus}</p>}
+                  {createStatus && <p className={`topic-create-status ${createStatusType === "success" ? "is-success" : "is-error"}`}>{createStatus}</p>}
                   <div className="modal-actions">
                     <button className="secondary-button" type="button" onClick={closeCreateModal}>취소</button>
                     <button className="primary-button" type="submit" disabled={!createTarget || !topicName.trim() || isDuplicateName || isCreating}>
