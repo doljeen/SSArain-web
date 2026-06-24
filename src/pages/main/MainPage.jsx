@@ -2513,6 +2513,14 @@ export default function MainPage() {
       await apiPost(endpoints.brains.join(brain.id), {});
       const myBrains = await apiGet(endpoints.brains.mine);
       const joinedBrain = (myBrains?.brains || []).some((joined) => String(joined.id ?? joined.bid ?? joined.brainId) === String(brain.id));
+      setBrainSearch((current) => ({
+        ...current,
+        results: current.results.map((item) => (
+          String(item.id ?? item.bid ?? item.brainId) === String(brain.id)
+            ? { ...item, joinStatus: joinedBrain ? "ACTIVE" : "PENDING" }
+            : item
+        ))
+      }));
       showToast(joinedBrain ? `${brain.name} 가입이 완료되었습니다.` : `${brain.name} 가입 요청을 보냈습니다.`);
       await loadMainData();
     } catch (error) {

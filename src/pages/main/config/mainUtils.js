@@ -32,6 +32,7 @@ export const normalizeBrain = (brain) => ({
   owner: brain.adminName || "나",
   members: Array.isArray(brain.memberNames) ? brain.memberNames.length : 1,
   topicsCount: Array.isArray(brain.topics) ? brain.topics.length : 0,
+  joinStatus: brain.joinStatus || "INACTIVE",
   isPreview: Boolean(brain.isPreview)
 });
 

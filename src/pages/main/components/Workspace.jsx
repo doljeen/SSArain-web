@@ -490,10 +490,12 @@ export default function Workspace({
   const submitBrainSearch = (event) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    onSearchBrains(String(formData.get("brainKeyword") || "").trim(), 0, brainSearch.includeJoined);
+    const excludeJoined = formData.get("excludeJoined") === "on";
+    onSearchBrains(String(formData.get("brainKeyword") || "").trim(), 0, !excludeJoined);
   };
   const hasBrainTabs = isAuthenticated && openBrainTabs.length > 0;
   const isNeuronDetailView = view === "posts" && hasActiveTopic && Boolean(nodeDetail?.isOpen);
+  const activeBrainJoinStatus = String(activeBrain?.joinStatus || "INACTIVE").toUpperCase();
 
   return (
     <section className={`workspace ${hasBrainTabs ? "has-brain-tabs" : ""} ${isNeuronDetailView ? "is-neuron-detail-view" : ""}`} aria-label="SSArain workspace">
@@ -543,7 +545,7 @@ export default function Workspace({
               <span>관리모드</span>
             </button>
           )}
-          {isBrainPreview && activeBrain && (
+          {isBrainPreview && activeBrain && activeBrainJoinStatus === "INACTIVE" && (
             <button className="header-button preview-join-button" type="button" onClick={() => onJoinBrain(activeBrain)}>
               가입
             </button>
@@ -572,12 +574,9 @@ export default function Workspace({
 
               <label className="brain-search-checkbox">
                 <input
+                  name="excludeJoined"
                   type="checkbox"
-                  checked={!brainSearch.includeJoined}
-                  onChange={(event) => {
-                    const includeJoined = !event.target.checked;
-                    onSearchBrains(brainSearch.query, 0, includeJoined);
-                  }}
+                  defaultChecked={!brainSearch.includeJoined}
                 />
                 내가 소속된 Brain 제외
               </label>
@@ -590,36 +589,55 @@ export default function Workspace({
               <p className="panel-kicker">FIND BRAIN</p>
               <h1 id="brain-search-heading">Brain 찾기</h1>
             </div>
-            <span>{brainSearch.totalElements}개 결과</span>
+            <div className="brain-search-summary-right">
+              <div className="brain-policy-legend" aria-label="Brain 가입 정책 색상 안내">
+                <span className="is-public"><i aria-hidden="true" />공개</span>
+                <span className="is-private"><i aria-hidden="true" />초대 한정</span>
+              </div>
+              <span>{brainSearch.totalElements}개 결과</span>
+            </div>
           </div>
 
           {brainSearch.message ? (
             <p className="brain-search-message" role="status">{brainSearch.message}</p>
           ) : (
             <div className="brain-result-grid">
-              {brainSearch.results.map((brain) => (
-                <article
-                  className="brain-result-card"
-                  key={brain.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={(event) => onPreviewBrain(event, brain)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") onPreviewBrain(event, brain);
-                  }}
-                  aria-label={`${brain.name} Brain 미리보기`}
-                >
-                  <div className="brain-result-top">
-                    <strong>{brain.name}</strong>
-                    <span>{brain.adminName || "관리자 미지정"}</span>
-                  </div>
-                  <p>{brain.description || "등록된 소개 문구가 없습니다."}</p>
-                  <div className="brain-result-bottom">
-                    <small>가입 인원 {brain.memberNames?.length || 0}명</small>
-                    <button type="button" onClick={(event) => { event.stopPropagation(); onJoinBrain(brain); }}>가입</button>
-                  </div>
-                </article>
-              ))}
+              {brainSearch.results.map((brain) => {
+                const joinPolicy = String(brain.joinPolicy || "PROTECTED").toUpperCase();
+                const joinStatus = String(brain.joinStatus || "INACTIVE").toUpperCase();
+
+                return (
+                  <article
+                    className={`brain-result-card ${joinPolicy === "PUBLIC" ? "is-public" : "is-private"}`}
+                    key={brain.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={(event) => onPreviewBrain(event, brain)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") onPreviewBrain(event, brain);
+                    }}
+                    aria-label={`${brain.name} Brain 미리보기`}
+                  >
+                    <div className="brain-result-top">
+                      <strong>{brain.name}</strong>
+                      <div className="brain-result-badges">
+                        <span>{brain.adminName || "관리자 미지정"}</span>
+                      </div>
+                    </div>
+                    <p>{brain.description || "등록된 소개 문구가 없습니다."}</p>
+                    <div className="brain-result-bottom">
+                      <small>가입 인원 {brain.memberNames?.length || 0}명</small>
+                      {joinStatus === "ACTIVE" ? (
+                        <span className="brain-join-status is-active">이미 소속됨</span>
+                      ) : joinStatus === "PENDING" ? (
+                        <span className="brain-join-status is-pending">수락 대기중</span>
+                      ) : (
+                        <button type="button" onClick={(event) => { event.stopPropagation(); onJoinBrain(brain); }}>가입</button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )}
 
