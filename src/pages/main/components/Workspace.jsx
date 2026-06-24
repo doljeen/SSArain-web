@@ -408,14 +408,23 @@ export default function Workspace({
     () => findTopicPath(visibleRootTopics, activeTopic?.id),
     [visibleRootTopics, activeTopic?.id]
   );
+  const postSourceNodes = useMemo(() => {
+    if (!activeTopic) return [];
+    return pageData.nodes.map((node) => ({
+      ...node,
+      topicId: String(activeTopic.id),
+      topicName: activeTopic.name
+    }));
+  }, [activeTopic, pageData.nodes]);
   // Post List의 검색어와 최신순/인기순 정렬을 적용한 Neuron 목록입니다.
   const filteredNodes = useMemo(() => {
     const keyword = postQuery.trim().toLowerCase();
-    const matchedNodes = keyword ? pageData.nodes.filter((node) => (
+    const matchedNodes = keyword ? postSourceNodes.filter((node) => (
       node.title?.toLowerCase().includes(keyword)
       || node.content?.toLowerCase().includes(keyword)
       || node.writer?.toLowerCase().includes(keyword)
-    )) : pageData.nodes;
+      || node.topicName?.toLowerCase().includes(keyword)
+    )) : postSourceNodes;
 
     return [...matchedNodes].sort((firstNode, secondNode) => {
       if (postSort === "popular") {
@@ -425,7 +434,7 @@ export default function Workspace({
 
       return new Date(secondNode.createdAt || 0).getTime() - new Date(firstNode.createdAt || 0).getTime();
     });
-  }, [pageData.nodes, postQuery, postSort]);
+  }, [postQuery, postSort, postSourceNodes]);
   // Neuron 상세 댓글은 답글 구조로 보여주기 위해 트리로 변환합니다.
   const commentTree = useMemo(() => buildCommentTree(nodeDetail?.data?.comments || []), [nodeDetail?.data?.comments]);
   // 답글 작성/댓글 수정 중일 때 form 위에 대상 댓글을 표시합니다.
@@ -864,48 +873,50 @@ export default function Workspace({
               </>
             ) : null}
           </article>
-          ) : view === "posts" && hasActiveTopic ? (
-          // Post List 보기에서는 현재 Topic의 문서 목록 형태로 노드를 보여줍니다.
+          ) : view === "posts" ? (
+          // Post List 보기에서는 현재 선택한 Topic의 문서 목록 형태로 노드를 보여줍니다.
           <div className="post-list">
-            <div className="post-list-header">
-              <div>
-                <p className="panel-kicker">POST LIST</p>
-                <h1>{activeTopic.name}</h1>
-              </div>
-              <div className="post-list-tools">
-                <div className="post-sort-toggle" role="group" aria-label="Neuron 정렬">
-                  <button
-                    className={postSort === "latest" ? "is-active" : ""}
-                    type="button"
-                    onClick={() => setPostSort("latest")}
-                  >
-                    최신순
-                  </button>
-                  <button
-                    className={postSort === "popular" ? "is-active" : ""}
-                    type="button"
-                    onClick={() => setPostSort((current) => current === "popular" ? "latest" : "popular")}
-                  >
-                    인기순
-                  </button>
+            {activeTopic && (
+              <div className="post-list-header">
+                <div>
+                  <p className="panel-kicker">POST LIST</p>
+                  <h1>{activeTopic.name}</h1>
                 </div>
-                <label className="post-search">
-                  <Icon name="search" />
-                  <input type="search" value={postQuery} onChange={(event) => setPostQuery(event.target.value)} placeholder="Neuron 검색" />
-                </label>
-                {canCreateNeuron && (
-                  <button className="node-create-button" type="button" onClick={onOpenNodeModal}>
-                    <Icon name="plus" />
-                    <span>뉴런 추가</span>
-                  </button>
-                )}
+                <div className="post-list-tools">
+                  <div className="post-sort-toggle" role="group" aria-label="Neuron 정렬">
+                    <button
+                      className={postSort === "latest" ? "is-active" : ""}
+                      type="button"
+                      onClick={() => setPostSort("latest")}
+                    >
+                      최신순
+                    </button>
+                    <button
+                      className={postSort === "popular" ? "is-active" : ""}
+                      type="button"
+                      onClick={() => setPostSort((current) => current === "popular" ? "latest" : "popular")}
+                    >
+                      인기순
+                    </button>
+                  </div>
+                  <label className="post-search">
+                    <Icon name="search" />
+                    <input type="search" value={postQuery} onChange={(event) => setPostQuery(event.target.value)} placeholder="Neuron 검색" />
+                  </label>
+                  {canCreateNeuron && (
+                    <button className="node-create-button" type="button" onClick={onOpenNodeModal}>
+                      <Icon name="plus" />
+                      <span>뉴런 추가</span>
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="post-card-list">
               {filteredNodes.map((node) => (
-                <button className="post-card" type="button" key={node.id} onClick={(event) => onOpenNodeDetail(event, node.id, activeTopic.id)}>
-                  <span className="post-topic"><Icon name="folder" />{activeTopic.name}</span>
+                <button className="post-card" type="button" key={`${node.topicId}-${node.id}`} onClick={(event) => node.topicId && onOpenNodeDetail(event, node.id, node.topicId)}>
+                  <span className="post-topic"><Icon name="folder" />{node.topicName || activeTopic?.name || "Topic"}</span>
                   <span className="post-card-body">
                     <strong>{node.title}</strong>
                     <small>{node.content || "내용이 없습니다."}</small>
@@ -918,7 +929,14 @@ export default function Workspace({
                   </span>
                 </button>
               ))}
-              {!filteredNodes.length && (
+              {!activeTopic && (
+                <div className="post-empty-state is-topic-required">
+                  <Icon name="file" />
+                  <strong>현재 선택된 Topic이 없습니다.</strong>
+                  <span>Synapse View에서 Topic을 선택하면 해당 Topic의 Neuron 목록을 확인할 수 있습니다.</span>
+                </div>
+              )}
+              {activeTopic && !filteredNodes.length && (
                 <div className="post-empty-state">
                   <Icon name="file" />
                   <strong>{postQuery ? "검색 결과가 없습니다." : "아직 작성된 Neuron이 없습니다."}</strong>

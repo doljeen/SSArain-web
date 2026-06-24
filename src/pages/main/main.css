@@ -615,6 +615,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 18px;
   border-bottom: 1px solid #edf2f8;
 }
 
@@ -623,11 +624,14 @@ button {
   display: flex;
   align-items: center;
   gap: 12px;
+  position: relative;
+  z-index: 2;
+  background: #ffffff;
 }
 
 .breadcrumb {
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -636,11 +640,21 @@ button {
   color: #718096;
   font-size: 13px;
   font-weight: 850;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
 }
 
 .breadcrumb::-webkit-scrollbar {
-  display: none;
+  height: 5px;
+}
+
+.breadcrumb::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.breadcrumb::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .breadcrumb button {
@@ -657,14 +671,11 @@ button {
 }
 
 .crumb-chip {
-  max-width: min(280px, 28vw);
+  max-width: none;
   height: 34px;
   padding: 0 12px;
   display: inline-flex;
   align-items: center;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   border-radius: 9px;
   background: #f3f6fb;
@@ -1729,6 +1740,13 @@ button {
   overflow-wrap: anywhere;
 }
 
+.post-list-subtitle {
+  margin: 8px 0 0;
+  color: #74849a;
+  font-size: 13px;
+  font-weight: 760;
+}
+
 .post-list-tools {
   min-width: 0;
   display: flex;
@@ -1914,6 +1932,28 @@ button {
   background: rgba(255, 255, 255, 0.72);
   color: #718096;
   text-align: center;
+}
+
+.post-empty-state.is-topic-required {
+  min-height: min(520px, calc(100vh - 190px));
+  margin: 0 8px;
+  border-radius: 24px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.78)),
+    radial-gradient(#d7e4f4 1.1px, transparent 1.1px) 0 0 / 24px 24px;
+}
+
+.post-empty-state.is-topic-required svg {
+  width: 44px;
+  height: 44px;
+}
+
+.post-empty-state.is-topic-required strong {
+  font-size: 22px;
+}
+
+.post-empty-state.is-topic-required span {
+  font-size: 15px;
 }
 
 .post-empty-state svg {
