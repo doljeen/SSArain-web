@@ -348,11 +348,14 @@ export default function Workspace({
   view,
   isAuthenticated,
   isBrainSearchView,
+  isBrainPreview,
+  canCreateNeuron = true,
   canManageWorkspace,
   manageMode,
   onRoute,
   onSearchBrains,
   onJoinBrain,
+  onPreviewBrain,
   onSelectBrain,
   onCloseBrainTab,
   onMoveToTopic,
@@ -374,6 +377,7 @@ export default function Workspace({
   quizGenerationCount,
   quizGenerationLimit,
   commentDraft,
+  canWriteComment,
   canDeleteNode,
   onCloseNodeDetail,
   onToggleNodeRecommend,
@@ -434,7 +438,7 @@ export default function Workspace({
   const canModerateComments = canManageWorkspace;
   const canGenerateQuiz = canManageWorkspace && manageMode;
   const buildTopicRoute = (topicId, routeView = "synapse") => (
-    activeBrain?.id && topicId ? `/brains/${activeBrain.id}/topics/${topicId}/${routeView}` : `/topics/${topicId}/${routeView}`
+    activeBrain?.id && topicId ? `/brains/${activeBrain.id}${activeBrain.isPreview ? "/preview" : ""}/topics/${topicId}/${routeView}` : `/topics/${topicId}/${routeView}`
   );
   const quizLimitReached = Number(quizGenerationCount || 0) >= Number(quizGenerationLimit || 2);
   const quizScore = useMemo(() => {
@@ -460,15 +464,17 @@ export default function Workspace({
               {comment.createdAt && <span>{formatDate(comment.createdAt)}</span>}
             </div>
             <p>{comment.content}</p>
-            <div className="comment-actions" aria-label={`${comment.writer} 댓글 작업`}>
-              <button type="button" onClick={() => onStartCommentReply(comment)}>답글</button>
-              {canEditComment && (
-                <>
-                  <button type="button" onClick={() => onStartCommentEdit(comment)}>수정</button>
-                  <button className="is-danger" type="button" onClick={() => onDeleteComment(comment)}>삭제</button>
-                </>
-              )}
-            </div>
+            {canWriteComment && (
+              <div className="comment-actions" aria-label={`${comment.writer} 댓글 작업`}>
+                <button type="button" onClick={() => onStartCommentReply(comment)}>답글</button>
+                {canEditComment && (
+                  <>
+                    <button type="button" onClick={() => onStartCommentEdit(comment)}>수정</button>
+                    <button className="is-danger" type="button" onClick={() => onDeleteComment(comment)}>삭제</button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </article>
         {comment.children.length > 0 && (
@@ -536,6 +542,11 @@ export default function Workspace({
               <span>관리모드</span>
             </button>
           )}
+          {isBrainPreview && activeBrain && (
+            <button className="header-button preview-join-button" type="button" onClick={() => onJoinBrain(activeBrain)}>
+              가입
+            </button>
+          )}
           <div className="view-tabs" role="tablist" aria-label="보기 전환">
             <button className={`view-tab ${view === "synapse" ? "is-active" : ""}`} type="button" role="tab" aria-selected={view === "synapse"} onClick={(event) => { onRoute(event, activeTopic ? buildTopicRoute(activeTopic.id, "synapse") : "/main/synapse"); onSetView("synapse"); }}><Icon name="synapse" /><span>Synapse View</span></button>
             <button className={`view-tab ${view === "posts" ? "is-active" : ""}`} type="button" role="tab" aria-selected={view === "posts"} onClick={(event) => { onRoute(event, activeTopic ? buildTopicRoute(activeTopic.id, "posts") : "/main/posts"); onSetView("posts"); }}><Icon name="list" /><span>Post List</span></button>
@@ -586,7 +597,17 @@ export default function Workspace({
           ) : (
             <div className="brain-result-grid">
               {brainSearch.results.map((brain) => (
-                <article className="brain-result-card" key={brain.id}>
+                <article
+                  className="brain-result-card"
+                  key={brain.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={(event) => onPreviewBrain(event, brain)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") onPreviewBrain(event, brain);
+                  }}
+                  aria-label={`${brain.name} Brain 미리보기`}
+                >
                   <div className="brain-result-top">
                     <strong>{brain.name}</strong>
                     <span>{brain.adminName || "관리자 미지정"}</span>
@@ -594,7 +615,7 @@ export default function Workspace({
                   <p>{brain.description || "등록된 소개 문구가 없습니다."}</p>
                   <div className="brain-result-bottom">
                     <small>가입 인원 {brain.memberNames?.length || 0}명</small>
-                    <button type="button" onClick={() => onJoinBrain(brain)}>가입</button>
+                    <button type="button" onClick={(event) => { event.stopPropagation(); onJoinBrain(brain); }}>가입</button>
                   </div>
                 </article>
               ))}
@@ -761,7 +782,13 @@ export default function Workspace({
                     </div>
                   </div>
                   <div className="neuron-detail-actions">
-                    <button className={`recommend-button ${nodeDetail.liked ? "is-active" : ""}`} type="button" onClick={onToggleNodeRecommend}>
+                    <button
+                      className={`recommend-button ${nodeDetail.liked ? "is-active" : ""}`}
+                      type="button"
+                      onClick={onToggleNodeRecommend}
+                      disabled={isBrainPreview}
+                      title={isBrainPreview ? "미리보기에서는 추천할 수 없습니다." : undefined}
+                    >
                       <Icon name="plus" />
                       <span>추천 {nodeDetail.data.recommends || 0}</span>
                     </button>
@@ -784,22 +811,29 @@ export default function Workspace({
                     <h2 id="neuron-comments-heading"><Icon name="bell" />댓글 {nodeDetail.data.comments.length}</h2>
                   </div>
 
-                  <form className="comment-form" onSubmit={onSubmitComment}>
-                    {(commentDraft.parentId || commentDraft.editingId) && (
-                      <div className="comment-form-context">
-                        <strong>{commentDraft.editingId ? "댓글 수정 중" : "답글 작성 중"}</strong>
-                        {activeCommentTarget && <span>{activeCommentTarget.writer} · {activeCommentTarget.content}</span>}
-                        <button type="button" onClick={onCancelCommentDraft}>취소</button>
+                  {canWriteComment ? (
+                    <form className="comment-form" onSubmit={onSubmitComment}>
+                      {(commentDraft.parentId || commentDraft.editingId) && (
+                        <div className="comment-form-context">
+                          <strong>{commentDraft.editingId ? "댓글 수정 중" : "답글 작성 중"}</strong>
+                          {activeCommentTarget && <span>{activeCommentTarget.writer} · {activeCommentTarget.content}</span>}
+                          <button type="button" onClick={onCancelCommentDraft}>취소</button>
+                        </div>
+                      )}
+                      <textarea value={commentDraft.content} onChange={onUpdateCommentDraft} placeholder={commentDraft.parentId ? "답글을 입력해주세요." : "댓글을 입력해주세요."} maxLength={255} rows={4} />
+                      <div className="comment-form-actions">
+                        {commentDraft.status && <span role="status">{commentDraft.status}</span>}
+                        <button type="submit" disabled={commentDraft.isSubmitting}>
+                          {commentDraft.isSubmitting ? "저장 중" : (commentDraft.editingId ? "댓글 수정" : (commentDraft.parentId ? "답글 작성" : "댓글 작성"))}
+                        </button>
                       </div>
-                    )}
-                    <textarea value={commentDraft.content} onChange={onUpdateCommentDraft} placeholder={commentDraft.parentId ? "답글을 입력해주세요." : "댓글을 입력해주세요."} maxLength={255} rows={4} />
-                    <div className="comment-form-actions">
-                      {commentDraft.status && <span role="status">{commentDraft.status}</span>}
-                      <button type="submit" disabled={commentDraft.isSubmitting}>
-                        {commentDraft.isSubmitting ? "저장 중" : (commentDraft.editingId ? "댓글 수정" : (commentDraft.parentId ? "답글 작성" : "댓글 작성"))}
-                      </button>
+                    </form>
+                  ) : (
+                    <div className="comment-login-panel">
+                      <strong>댓글 작성은 로그인 후 이용할 수 있습니다.</strong>
+                      <button type="button" onClick={(event) => onRoute(event, "/login")}>로그인</button>
                     </div>
-                  </form>
+                  )}
 
                   <div className="comment-list">
                     {commentTree.map((comment) => renderComment(comment))}
@@ -840,10 +874,12 @@ export default function Workspace({
                   <Icon name="search" />
                   <input type="search" value={postQuery} onChange={(event) => setPostQuery(event.target.value)} placeholder="Neuron 검색" />
                 </label>
-                <button className="node-create-button" type="button" onClick={onOpenNodeModal}>
-                  <Icon name="plus" />
-                  <span>뉴런 추가</span>
-                </button>
+                {canCreateNeuron && (
+                  <button className="node-create-button" type="button" onClick={onOpenNodeModal}>
+                    <Icon name="plus" />
+                    <span>뉴런 추가</span>
+                  </button>
+                )}
               </div>
             </div>
 

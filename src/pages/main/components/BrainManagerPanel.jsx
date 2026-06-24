@@ -149,14 +149,14 @@ export default function BrainManagerPanel({
             </div>
           </section>}
 
-          <section className="brain-manager-section brain-leave-section">
+          <section className="brain-manager-section brain-danger-section">
             <div>
               <p className="panel-kicker">{isInfoMode ? "LEAVE BRAIN" : "MEMBERSHIP"}</p>
               <h3>Brain 탈퇴</h3>
               <span>이 Brain의 멤버 목록에서 내 계정을 제거합니다.</span>
             </div>
             <button
-              className="leave-button"
+              className="danger-button"
               type="button"
               onClick={onLeaveBrain}
               disabled={manager.isLeaving}
@@ -166,7 +166,7 @@ export default function BrainManagerPanel({
           </section>
 
           {!isInfoMode && canAdministerWorkspace && (
-            <section className="brain-manager-section brain-danger-section">
+            <section className="brain-manager-section brain-danger-section is-delete-section">
               <div>
                 <p className="panel-kicker">DANGER ZONE</p>
                 <h3>Brain 삭제</h3>

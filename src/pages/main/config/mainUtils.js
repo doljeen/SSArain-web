@@ -31,7 +31,8 @@ export const normalizeBrain = (brain) => ({
   brainRole: pickBrainRole(brain),
   owner: brain.adminName || "나",
   members: Array.isArray(brain.memberNames) ? brain.memberNames.length : 1,
-  topicsCount: Array.isArray(brain.topics) ? brain.topics.length : 0
+  topicsCount: Array.isArray(brain.topics) ? brain.topics.length : 0,
+  isPreview: Boolean(brain.isPreview)
 });
 
 // WAS NodeInfoDto(nid, title, content)를 그래프/Post List에서 쓰는 노드 형태로 정규화합니다.

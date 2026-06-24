@@ -52,6 +52,7 @@ const emptyPageData = {
   user: { name: "", email: "", role: "" },
   activeBrainId: null,
   activeTopicId: null,
+  previewBrain: null,
   brains: [],
   topics: [],
   nodes: [],
@@ -81,12 +82,12 @@ const clampGraph = (graphState) => ({
 
 // 현재 URL에서 Brain/Topic/Neuron id와 view 모드를 읽어 화면 상태로 복원합니다.
 const getTopicIdFromRoute = (path) => {
-  const match = path.match(/^\/brains\/[^/]+\/topics\/([^/]+)/) || path.match(/^\/topics\/([^/]+)/);
+  const match = path.match(/^\/brains\/[^/]+(?:\/preview)?\/topics\/([^/]+)/) || path.match(/^\/topics\/([^/]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 };
 
 const getNodeIdFromRoute = (path) => {
-  const match = path.match(/^\/brains\/[^/]+\/topics\/[^/]+\/nodes\/([^/]+)/) || path.match(/^\/nodes\/([^/]+)/);
+  const match = path.match(/^\/brains\/[^/]+(?:\/preview)?\/topics\/[^/]+\/nodes\/([^/]+)/) || path.match(/^\/nodes\/([^/]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 };
 
@@ -96,12 +97,13 @@ const getBrainIdFromRoute = (path) => {
 };
 
 const isBrainSearchRoute = (path) => path === "/brains/search";
+const isBrainPreviewRoute = (path) => /^\/brains\/[^/]+\/preview(?:\/|$)/.test(path);
 const getViewFromRoute = (path) => path.includes("/quiz") ? "quiz" : path.includes("/posts") || path.includes("/nodes/") ? "posts" : "synapse";
-const buildTopicRoute = (brainId, topicId, routeView = "synapse") => (
-  brainId && topicId ? `/brains/${brainId}/topics/${topicId}/${routeView}` : `/topics/${topicId}/${routeView}`
+const buildTopicRoute = (brainId, topicId, routeView = "synapse", options = {}) => (
+  brainId && topicId ? `/brains/${brainId}${options.preview ? "/preview" : ""}/topics/${topicId}/${routeView}` : `/topics/${topicId}/${routeView}`
 );
-const buildNodeRoute = (brainId, topicId, nodeId) => (
-  brainId && topicId ? `/brains/${brainId}/topics/${topicId}/nodes/${nodeId}` : `/nodes/${nodeId}`
+const buildNodeRoute = (brainId, topicId, nodeId, options = {}) => (
+  brainId && topicId ? `/brains/${brainId}${options.preview ? "/preview" : ""}/topics/${topicId}/nodes/${nodeId}` : `/nodes/${nodeId}`
 );
 // Brain 권한은 USER/MANAGER/ADMIN 값을 화면 라벨과 기능 권한으로 변환합니다.
 const normalizeRoleValue = (role) => String(role || "").trim().toUpperCase();
@@ -468,25 +470,30 @@ export default function MainPage() {
   // 트리 구조의 토픽을 펼쳐서 현재 선택된 Brain/Topic을 계산합니다.
   const topicsFlat = useMemo(() => flattenTopics(pageData.topics), [pageData.topics]);
   const nodeContentByteCount = useMemo(() => getByteLength(nodeDraft.content), [nodeDraft.content]);
-  const activeBrain = pageData.brains.find((brain) => String(brain.id) === String(pageData.activeBrainId)) || null;
+  const activeBrain = pageData.brains.find((brain) => String(brain.id) === String(pageData.activeBrainId))
+    || (String(pageData.previewBrain?.id) === String(pageData.activeBrainId) ? pageData.previewBrain : null);
   const activeTopic = topicsFlat.find((topic) => String(topic.id) === String(pageData.activeTopicId)) || null;
   const isZoomed = graph.scale >= 1.28;
   const isAuthenticated = authStatus === "authenticated";
   const isBrainSearchView = isBrainSearchRoute(route);
+  const isBrainPreview = Boolean(activeBrain?.isPreview || isBrainPreviewRoute(route));
   const activeBrainRole = normalizeRoleValue(activeBrain?.brainRole || activeBrain?.role);
   const canManageBrain = (brain) => Boolean(
     isAuthenticated
     && brain
+    && !brain.isPreview
     && canUseManageMode(brain.brainRole || brain.role)
   );
   const canManageWorkspace = Boolean(
     isAuthenticated
     && activeBrain
+    && !isBrainPreview
     && canUseManageMode(activeBrainRole)
   );
   const canAdministerWorkspace = Boolean(
     isAuthenticated
     && activeBrain
+    && !isBrainPreview
     && canAdministerRole(activeBrainRole)
   );
   const isCurrentUserWriter = (writer) => {
@@ -544,6 +551,7 @@ export default function MainPage() {
 
   const rememberActiveBrainState = () => {
     if (!pageData.activeBrainId || authStatus !== "authenticated") return;
+    if (String(pageData.previewBrain?.id) === String(pageData.activeBrainId)) return;
     const brainId = String(pageData.activeBrainId);
     const previousState = brainTabState.current[brainId] || {};
     const rememberedTopics = pageData.topics?.length ? pageData.topics : previousState.topics || [];
@@ -568,6 +576,7 @@ export default function MainPage() {
       ...current,
       activeBrainId: String(brainId),
       activeTopicId: cachedState.activeTopicId || null,
+      previewBrain: null,
       topics: clone(cachedState.topics || []),
       nodes: clone(cachedState.nodes || []),
       topicNodesById: clone(cachedState.topicNodesById || {}),
@@ -817,7 +826,7 @@ export default function MainPage() {
 
     setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
     setView("quiz");
-    handleRouteClick(event, buildTopicRoute(activeBrain?.id, activeTopic.id, "quiz"));
+    handleRouteClick(event, buildTopicRoute(activeBrain?.id, activeTopic.id, "quiz", { preview: isBrainPreview }));
     loadTopicQuizzes(activeTopic);
   };
 
@@ -896,18 +905,28 @@ export default function MainPage() {
       if (requestId !== workspaceLoadSeq.current) return;
 
       if (selectedTopic && nextView === "posts") topicNodesById[String(selectedTopic.id)] = nodes;
-      const normalizedBrain = normalizeBrain({ id: brainId, ...detail, topics: detail?.topics || [] });
+      const previewSource = options.previewBrain || {};
+      const normalizedBrain = normalizeBrain({
+        ...previewSource,
+        id: brainId,
+        ...detail,
+        topics: detail?.topics || [],
+        isPreview: Boolean(options.preview)
+      });
       if (requestId !== workspaceLoadSeq.current) return;
 
       setPageData((current) => ({
         ...current,
         activeBrainId: String(normalizedBrain.id),
         activeTopicId: selectedTopic ? String(selectedTopic.id) : null,
-        brains: current.brains.map((brain) => (
-          String(brain.id) === String(normalizedBrain.id)
-            ? mergeBrainPreservingRole(brain, normalizedBrain)
-            : brain
-        )),
+        previewBrain: options.preview ? normalizedBrain : null,
+        brains: options.preview
+          ? current.brains
+          : current.brains.map((brain) => (
+            String(brain.id) === String(normalizedBrain.id)
+              ? mergeBrainPreservingRole(brain, normalizedBrain)
+              : brain
+          )),
         topics: visibleTopics,
         nodes,
         topicNodesById,
@@ -933,6 +952,7 @@ export default function MainPage() {
       setPageData((current) => ({
         ...current,
         ...guestPreview,
+        previewBrain: null,
         topicNodesById: {},
         quizStatusByTopicId: {},
         user: { name: "Guest", email: "", role: "GUEST" }
@@ -949,7 +969,10 @@ export default function MainPage() {
 
       const brains = (myBrains?.brains || []).map((brain) => normalizeBrain(brain));
       const routedBrainId = getBrainIdFromRoute(route);
-      const selectedBrain = brains.find((brain) => String(brain.id) === String(routedBrainId)) || brains[0] || null;
+      const isPreviewRoute = isBrainPreviewRoute(route);
+      const selectedBrain = isPreviewRoute
+        ? (routedBrainId ? normalizeBrain({ id: routedBrainId, name: "Brain", isPreview: true }) : null)
+        : (brains.find((brain) => String(brain.id) === String(routedBrainId)) || brains[0] || null);
 
       let topics = [];
       let catalogTopics = [];
@@ -958,6 +981,7 @@ export default function MainPage() {
       let quizStatusByTopicId = {};
       let activeTopicId = null;
       let nextBrains = brains;
+      let previewBrainDetail = null;
 
       if (selectedBrain) {
         const brainDetail = await apiGet(endpoints.brains.topics(selectedBrain.id, { depth: BRAIN_TOPIC_TREE_DEPTH }));
@@ -983,12 +1007,20 @@ export default function MainPage() {
       if (selectedTopic && getViewFromRoute(route) === "posts") topicNodesById[String(selectedTopic.id)] = nodes;
       topics = visibleTopics;
 
-        const detailBrain = normalizeBrain({ id: selectedBrain.id, ...brainDetail, topics: brainDetail?.topics || [] });
-        nextBrains = brains.map((brain) => (
-          String(brain.id) === String(detailBrain.id)
-            ? mergeBrainPreservingRole(brain, detailBrain)
-            : brain
-        ));
+        const detailBrain = normalizeBrain({
+          id: selectedBrain.id,
+          ...brainDetail,
+          topics: brainDetail?.topics || [],
+          isPreview: isPreviewRoute
+        });
+        nextBrains = isPreviewRoute
+          ? brains
+          : brains.map((brain) => (
+            String(brain.id) === String(detailBrain.id)
+              ? mergeBrainPreservingRole(brain, detailBrain)
+              : brain
+          ));
+        if (isPreviewRoute) previewBrainDetail = detailBrain;
       }
 
       setAuthStatus("authenticated");
@@ -1001,6 +1033,7 @@ export default function MainPage() {
         user: normalizedUser,
         activeBrainId: selectedBrain ? String(selectedBrain.id) : null,
         activeTopicId,
+        previewBrain: isPreviewRoute && selectedBrain ? (previewBrainDetail || selectedBrain) : null,
         brains: nextBrains,
         topics,
         nodes,
@@ -1016,6 +1049,7 @@ export default function MainPage() {
         setPageData((current) => ({
           ...current,
           ...guestPreview,
+          previewBrain: null,
           topicNodesById: {},
           quizStatusByTopicId: {},
           user: { name: "Guest", email: "", role: "GUEST" }
@@ -1055,6 +1089,30 @@ export default function MainPage() {
           : "Brain 검색은 로그인 후 이용할 수 있습니다."
       }));
     }
+  };
+
+  const previewBrainFromSearch = (event, brain) => {
+    if (!brain?.id) return;
+    event?.preventDefault?.();
+    rememberActiveBrainState();
+
+    const previewBrain = normalizeBrain({ ...brain, isPreview: true });
+    const previewRoute = `/brains/${previewBrain.id}/preview`;
+    setPageData((current) => ({
+      ...current,
+      activeBrainId: String(previewBrain.id),
+      activeTopicId: null,
+      previewBrain,
+      topics: [],
+      nodes: [],
+      topicNodesById: {},
+      quizStatusByTopicId: {}
+    }));
+    setView("synapse");
+    setManageMode(false);
+    setGraph(clampGraph({ x: 0, y: 0, scale: 1, tilt: 0 }));
+    handleRouteClick(event, previewRoute);
+    loadBrainWorkspace(previewBrain.id, null, { view: "synapse", preview: true, previewBrain });
   };
 
   // 앱 최초 진입과 브라우저 뒤로가기/앞으로가기에서 URL을 읽어 화면 상태를 복원합니다.
@@ -1105,7 +1163,7 @@ export default function MainPage() {
         setPageData((current) => ({ ...current, activeTopicId: routedTopicId }));
       }
       if (routedBrainId && event?.type === "popstate" && !isBrainSearchRoute(nextRoute)) {
-        loadBrainWorkspace(routedBrainId, routedTopicId, { view: nextView });
+        loadBrainWorkspace(routedBrainId, routedTopicId, { view: nextView, preview: isBrainPreviewRoute(nextRoute) });
       }
       if (isBrainSearchRoute(nextRoute)) {
         searchBrains("", 0);
@@ -1305,6 +1363,11 @@ export default function MainPage() {
   };
 
   const openNodeCreateModal = async () => {
+    if (isBrainPreview) {
+      showToast("미리보기에서는 Neuron을 작성할 수 없습니다.");
+      return;
+    }
+
     const topicForNeuron = await resolveActiveTopicForNeuron();
     if (!topicForNeuron) return;
 
@@ -1381,7 +1444,7 @@ export default function MainPage() {
       setNodeDetail({ isOpen: true, isLoading: false, data: normalizeNodeDetail(created), status: "", liked: false });
       closeNodeCreateModal();
       setView("posts");
-      const nextRoute = buildNodeRoute(activeBrain?.id, activeTopic?.id, created.nid || nextNode.id);
+      const nextRoute = buildNodeRoute(activeBrain?.id, activeTopic?.id, created.nid || nextNode.id, { preview: isBrainPreview });
       routeTo(nextRoute);
       setRoute(nextRoute);
       showToast(`${created.title || title} Neuron 작성 완료`);
@@ -1467,6 +1530,7 @@ export default function MainPage() {
         ...current,
         activeBrainId: String(brainId),
         activeTopicId: null,
+        previewBrain: null,
         topics: [],
         nodes: [],
         topicNodesById: {},
@@ -1542,7 +1606,7 @@ export default function MainPage() {
         activeTopicId: String(topicId),
         nodes: current.topicNodesById?.[String(topicId)] || []
       }));
-      if (shouldUpdateRoute) handleRouteClick(event, buildTopicRoute(activeBrain?.id, topicId, "posts"));
+      if (shouldUpdateRoute) handleRouteClick(event, buildTopicRoute(activeBrain?.id, topicId, "posts", { preview: isBrainPreview }));
       if (activeBrain) {
         fetchTopicNodes(activeBrain.id, selectedTopic).then((nodes) => {
           setPageData((current) => String(current.activeTopicId) === String(topicId) ? {
@@ -1577,19 +1641,19 @@ export default function MainPage() {
         }));
       });
     }
-    if (shouldUpdateRoute) handleRouteClick(event, buildTopicRoute(activeBrain?.id, topicId, "synapse"));
+    if (shouldUpdateRoute) handleRouteClick(event, buildTopicRoute(activeBrain?.id, topicId, "synapse", { preview: isBrainPreview }));
   };
 
   const openNodeDetail = (event, nodeId, topicId = activeTopic?.id) => {
     if (topicId) {
       setPageData((current) => ({ ...current, activeTopicId: String(topicId) }));
     }
-    handleRouteClick(event, buildNodeRoute(activeBrain?.id, topicId, nodeId));
+    handleRouteClick(event, buildNodeRoute(activeBrain?.id, topicId, nodeId, { preview: isBrainPreview }));
     loadNodeDetail(nodeId);
   };
 
   const closeNodeDetail = (event) => {
-    const nextRoute = activeTopic ? buildTopicRoute(activeBrain?.id, activeTopic.id, "posts") : "/main/posts";
+    const nextRoute = activeTopic ? buildTopicRoute(activeBrain?.id, activeTopic.id, "posts", { preview: isBrainPreview }) : "/main/posts";
     setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
     setCommentDraft({ content: "", status: "", isSubmitting: false, parentId: null, editingId: null });
     setView("posts");
@@ -1609,7 +1673,7 @@ export default function MainPage() {
 
     try {
       await apiDelete(endpoints.nodes.remove(nodeId));
-      const nextRoute = activeTopic ? buildTopicRoute(activeBrain?.id, activeTopic.id, "posts") : "/main/posts";
+      const nextRoute = activeTopic ? buildTopicRoute(activeBrain?.id, activeTopic.id, "posts", { preview: isBrainPreview }) : "/main/posts";
       setPageData((current) => ({
         ...current,
         nodes: current.nodes.filter((node) => String(node.id) !== String(nodeId)),
@@ -1632,6 +1696,11 @@ export default function MainPage() {
   };
 
   const toggleNodeRecommend = async () => {
+    if (isBrainPreview) {
+      showToast("미리보기에서는 추천할 수 없습니다.");
+      return;
+    }
+
     const nodeId = nodeDetail.data?.id;
     if (!nodeId) return;
 
@@ -1721,7 +1790,7 @@ export default function MainPage() {
           author,
           type: "comment",
           createdAt: comment?.createdAt || now,
-          route: buildNodeRoute(activeBrain?.id, activeTopic?.id, nodeId)
+          route: buildNodeRoute(activeBrain?.id, activeTopic?.id, nodeId, { preview: isBrainPreview })
         },
         ...(current.notifications || [])
       ].slice(0, 6),
@@ -1732,7 +1801,7 @@ export default function MainPage() {
           user: author,
           text: `${nodeTitle}에 ${isReply ? "답글" : "댓글"}을 작성했습니다.`,
           time: "방금 전",
-          route: buildNodeRoute(activeBrain?.id, activeTopic?.id, nodeId),
+          route: buildNodeRoute(activeBrain?.id, activeTopic?.id, nodeId, { preview: isBrainPreview }),
           preview: content
         },
         ...(current.activities || [])
@@ -1759,6 +1828,11 @@ export default function MainPage() {
 
   const submitComment = async (event) => {
     event.preventDefault();
+    if (!isAuthenticated) {
+      setCommentDraft((current) => ({ ...current, status: "로그인 후 댓글을 작성할 수 있습니다." }));
+      return;
+    }
+
     const content = commentDraft.content.trim();
     const nodeId = nodeDetail.data?.id;
 
@@ -1817,14 +1891,29 @@ export default function MainPage() {
   };
 
   const startCommentReply = (comment) => {
+    if (!isAuthenticated) {
+      setCommentDraft((current) => ({ ...current, status: "로그인 후 답글을 작성할 수 있습니다." }));
+      return;
+    }
+
     setCommentDraft({ content: "", status: "", isSubmitting: false, parentId: String(comment.id), editingId: null });
   };
 
   const startCommentEdit = (comment) => {
+    if (!isAuthenticated) {
+      setCommentDraft((current) => ({ ...current, status: "로그인 후 댓글을 수정할 수 있습니다." }));
+      return;
+    }
+
     setCommentDraft({ content: comment.content || "", status: "", isSubmitting: false, parentId: null, editingId: String(comment.id) });
   };
 
   const deleteComment = async (comment) => {
+    if (!isAuthenticated) {
+      setCommentDraft((current) => ({ ...current, status: "로그인 후 댓글을 삭제할 수 있습니다." }));
+      return;
+    }
+
     if (!nodeDetail.data) return;
     const shouldDelete = window.confirm("댓글을 삭제하시겠습니까?");
     if (!shouldDelete) return;
@@ -2430,6 +2519,7 @@ export default function MainPage() {
     setPageData((current) => ({
       ...current,
       ...guestPreview,
+      previewBrain: null,
       user: { name: "Guest", email: "", role: "GUEST" }
     }));
     routeTo("/main");
@@ -2469,10 +2559,13 @@ export default function MainPage() {
         openBrainTabs={openBrainTabs}
         isAuthenticated={isAuthenticated}
         isBrainSearchView={isBrainSearchView}
+        isBrainPreview={isBrainPreview}
+        canCreateNeuron={!isBrainPreview}
         canManageWorkspace={canManageWorkspace}
         manageMode={manageMode}
         onFocusPoint={focusGraphPoint}
         onJoinBrain={requestJoinBrain}
+        onPreviewBrain={previewBrainFromSearch}
         onMoveToTopic={moveToTopic}
         onOpenNodeDetail={openNodeDetail}
         onOpenNodeModal={openNodeCreateModal}
@@ -2496,6 +2589,7 @@ export default function MainPage() {
         quizGenerationCount={Number(quizGenerationCounts[String(activeTopic?.btid)] || 0)}
         quizGenerationLimit={QUIZ_GENERATION_LIMIT}
         commentDraft={commentDraft}
+        canWriteComment={isAuthenticated}
         canDeleteNode={canDeleteNode(nodeDetail.data)}
         onCloseNodeDetail={closeNodeDetail}
         onToggleNodeRecommend={toggleNodeRecommend}
