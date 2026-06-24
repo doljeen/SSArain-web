@@ -36,6 +36,8 @@ const emptyBrainManager = {
   isOpen: false,
   isLoading: false,
   isSaving: false,
+  isLeaving: false,
+  mode: "manage",
   brain: null,
   form: { name: "", description: "", joinPolicy: "PROTECTED" },
   members: [],
@@ -103,7 +105,7 @@ const buildNodeRoute = (brainId, topicId, nodeId) => (
 );
 // Brain 권한은 USER/MANAGER/ADMIN 값을 화면 라벨과 기능 권한으로 변환합니다.
 const normalizeRoleValue = (role) => String(role || "").trim().toUpperCase();
-const ROLE_LABELS = { USER: "일반학생", MANAGER: "반장", ADMIN: "관리자" };
+const ROLE_LABELS = { USER: "일반학생", MANAGER: "매니저", ADMIN: "관리자" };
 const MANAGE_ROLE_NAMES = ["ADMIN", "MANAGER"];
 const ADMIN_ROLE_NAMES = ["ADMIN"];
 const canUseManageMode = (role) => MANAGE_ROLE_NAMES.includes(normalizeRoleValue(role));
@@ -162,6 +164,7 @@ const pickBrainUserRole = (source = {}) => {
 
   return role;
 };
+
 const normalizeBrainUser = (user = {}, fallbackRole = "") => {
   const role = normalizeRoleValue(pickBrainUserRole(user) || fallbackRole || "USER");
 
@@ -1597,7 +1600,7 @@ export default function MainPage() {
     const nodeId = nodeDetail.data?.id;
     if (!nodeId) return;
     if (!canDeleteNode(nodeDetail.data)) {
-      showToast("Neuron 삭제는 관리자, 반장 또는 작성자만 가능합니다.");
+      showToast("Neuron 삭제는 관리자, 매니저 또는 작성자만 가능합니다.");
       return;
     }
 
@@ -2067,14 +2070,15 @@ export default function MainPage() {
   };
 
   // Brain 관리 모달 데이터 로드: Brain 정보, 현재 멤버, 초대 가능 사용자, 가입 요청을 병렬 조회합니다.
-  const loadBrainManagerData = async (brainId, keyword = "") => {
+  const loadBrainManagerData = async (brainId, keyword = "", mode = brainManager.mode || "manage") => {
     setBrainManager((current) => ({ ...current, isLoading: true, message: "" }));
+    const isManagePanel = mode === "manage";
 
     const [infoResult, membersResult, availableResult, requestsResult] = await Promise.allSettled([
       apiGet(endpoints.brains.info(brainId)),
       apiGet(endpoints.brains.members(brainId, 0, 50)),
-      apiGet(endpoints.brains.availableUsers(brainId, keyword, 0, 20)),
-      apiGet(endpoints.brains.joinRequests(brainId, 0, 50))
+      isManagePanel ? apiGet(endpoints.brains.availableUsers(brainId, keyword, 0, 20)) : Promise.resolve(null),
+      isManagePanel ? apiGet(endpoints.brains.joinRequests(brainId, 0, 50)) : Promise.resolve(null)
     ]);
 
     const failed = [infoResult, membersResult, availableResult, requestsResult]
@@ -2091,6 +2095,7 @@ export default function MainPage() {
     setBrainManager((current) => ({
       ...current,
       isLoading: false,
+      mode,
       brain: brainInfo ? { ...current.brain, ...brainInfo } : current.brain,
       form: brainInfo ? {
         name: brainInfo.name || "",
@@ -2100,13 +2105,13 @@ export default function MainPage() {
       members: membersResult.status === "fulfilled"
         ? normalizeBrainMemberPage(membersResult.value, [...current.members, currentUserRoleFallback])
         : current.members,
-      availableUsers: availableResult.status === "fulfilled" ? normalizeBrainUserPage(availableResult.value) : current.availableUsers,
-      joinRequests: requestsResult.status === "fulfilled" ? normalizeBrainUserPage(requestsResult.value) : current.joinRequests,
+      availableUsers: isManagePanel && availableResult.status === "fulfilled" ? normalizeBrainUserPage(availableResult.value) : current.availableUsers,
+      joinRequests: isManagePanel && requestsResult.status === "fulfilled" ? normalizeBrainUserPage(requestsResult.value) : current.joinRequests,
       message: failed.length ? `일부 정보를 불러오지 못했습니다 · ${failed[0]}` : ""
     }));
   };
 
-  // B19 권한 변경 API: 관리자만 멤버를 일반학생/반장/관리자로 바꿀 수 있습니다.
+  // B19 권한 변경 API: 관리자만 멤버를 일반학생/매니저/관리자로 바꿀 수 있습니다.
   const changeBrainMemberRole = async (member, role) => {
     if (!brainManager.brain) return;
     const nextRole = normalizeRoleValue(role);
@@ -2138,11 +2143,13 @@ export default function MainPage() {
 
     const brain = pageData.brains.find((item) => String(item.id) === String(brainId)) || activeBrain;
     if (!brain) return;
+    const mode = canUseManageMode(brain.brainRole || brain.role) ? "manage" : "info";
 
     setBrainManager({
       ...emptyBrainManager,
       isOpen: true,
       isLoading: true,
+      mode,
       brain,
       form: {
         name: brain.name || "",
@@ -2151,7 +2158,7 @@ export default function MainPage() {
       }
     });
 
-    await loadBrainManagerData(brain.id, "");
+    await loadBrainManagerData(brain.id, "", mode);
   };
 
   const closeBrainManager = () => setBrainManager(emptyBrainManager);
@@ -2267,6 +2274,12 @@ export default function MainPage() {
   // B03 멤버 삭제 API: 관리자 내보내기/권한 없음 같은 예외 메시지는 여기서 사용자에게 보여줍니다.
   const removeBrainMember = async (member) => {
     if (!brainManager.brain) return;
+    if (normalizeRoleValue(member.brainRole || member.role) === "ADMIN") {
+      const message = "관리자는 내보낼 수 없습니다.";
+      setBrainManager((current) => ({ ...current, message }));
+      showToast(message);
+      return;
+    }
 
     try {
       await apiDelete(endpoints.brains.removeUsers(brainManager.brain.id), { users: [member.id] });
@@ -2330,6 +2343,47 @@ export default function MainPage() {
         ...current,
         isDeleting: false,
         message: `Brain 삭제 실패 · ${error.message}`
+      }));
+    }
+  };
+
+  // B20 Brain 나가기 API입니다. 탈퇴 후 내 Brain 목록과 열린 탭에서 제거합니다.
+  const leaveBrain = async () => {
+    if (!brainManager.brain) return;
+
+    const brainId = String(brainManager.brain.id);
+    const brainName = brainManager.brain.name || "Brain";
+    const wasActiveBrain = String(pageData.activeBrainId) === brainId;
+    const confirmed = window.confirm(`${brainName} Brain에서 나가시겠습니까?`);
+    if (!confirmed) return;
+
+    try {
+      setBrainManager((current) => ({ ...current, isLeaving: true, message: "" }));
+      await apiDelete(endpoints.brains.leave(brainId));
+
+      delete brainTabState.current[brainId];
+      setOpenBrainTabs((current) => current.filter((brain) => String(brain.id) !== brainId));
+      setPageData((current) => ({
+        ...current,
+        activeBrainId: wasActiveBrain ? null : current.activeBrainId,
+        activeTopicId: wasActiveBrain ? null : current.activeTopicId,
+        brains: current.brains.filter((brain) => String(brain.id) !== brainId),
+        topics: wasActiveBrain ? [] : current.topics,
+        nodes: wasActiveBrain ? [] : current.nodes,
+        topicNodesById: wasActiveBrain ? {} : current.topicNodesById,
+        quizStatusByTopicId: wasActiveBrain ? {} : current.quizStatusByTopicId
+      }));
+      setTopicCatalog((current) => (wasActiveBrain ? [] : current));
+      setBrainManager(emptyBrainManager);
+      setView("synapse");
+      setRoute("/main");
+      routeTo("/main");
+      showToast(`${brainName} Brain에서 나갔습니다.`);
+    } catch (error) {
+      setBrainManager((current) => ({
+        ...current,
+        isLeaving: false,
+        message: `Brain 탈퇴 실패 · ${error.message}`
       }));
     }
   };
@@ -2543,6 +2597,7 @@ export default function MainPage() {
           onManageJoinRequest={manageJoinRequest}
           onChangeMemberRole={changeBrainMemberRole}
           onDeleteBrain={deleteBrain}
+          onLeaveBrain={leaveBrain}
           canAdministerWorkspace={canAdministerWorkspace}
         />
       )}

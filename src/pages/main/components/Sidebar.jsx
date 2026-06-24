@@ -120,9 +120,9 @@ export default function Sidebar({
                 <span>{brain.name}</span>
                 {isActive && <span className="status-dot" aria-hidden="true" />}
               </button>
-              {isActive && canManageBrain(brain) && (
+              {isActive && isAuthenticated && (
                 <button className="brain-manage-button" type="button" data-endpoint={endpoints.brains.members(brain.id)} onClick={(event) => onOpenBrainManage(event, brain.id)}>
-                  관리
+                  {canManageBrain(brain) ? "관리" : "정보"}
                 </button>
               )}
             </div>

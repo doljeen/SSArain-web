@@ -3141,6 +3141,11 @@ button {
   font-weight: 800;
 }
 
+.brain-manager-message.is-danger {
+  background: rgba(255, 241, 242, 0.92);
+  color: #e11d48;
+}
+
 .brain-manager-scroll {
   padding: 26px 28px 34px;
   display: grid;
@@ -3228,6 +3233,17 @@ button {
   box-shadow: 0 0 0 3px rgba(101, 87, 255, 0.12);
 }
 
+.brain-manager-form input:disabled,
+.brain-manager-form textarea:disabled {
+  color: #111827;
+  background: #f8fafc;
+  cursor: default;
+}
+
+.policy-toggle input:disabled {
+  cursor: default;
+}
+
 .policy-toggle {
   min-height: 60px;
   padding: 12px 14px;
@@ -3285,6 +3301,10 @@ button {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.brain-manager-grid.is-info-mode {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .member-column h4 {
@@ -3442,6 +3462,45 @@ button {
   color: #64748b;
   font-size: 13px;
   font-weight: 760;
+}
+
+.brain-leave-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-color: #fecdd3;
+  background: #fff7f7;
+}
+
+.brain-leave-section h3 {
+  color: #9f1239;
+}
+
+.brain-leave-section span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.leave-button {
+  height: 42px;
+  padding: 0 16px;
+  border-radius: 10px;
+  background: #fff1f2;
+  color: #e11d48;
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.leave-button:hover {
+  background: #ffe4e6;
+}
+
+.leave-button:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
 }
 
 .danger-button {

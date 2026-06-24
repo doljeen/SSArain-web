@@ -10,13 +10,16 @@ export default function BrainManagerPanel({
   onManageJoinRequest,
   onChangeMemberRole,
   onDeleteBrain,
+  onLeaveBrain,
   canAdministerWorkspace
 }) {
   const form = manager.form;
   const isProtected = form.joinPolicy === "PROTECTED";
-  const roleLabels = { USER: "일반학생", MANAGER: "반장", ADMIN: "관리자" };
+  const isInfoMode = manager.mode === "info";
+  const roleLabels = { USER: "일반학생", MANAGER: "매니저", ADMIN: "관리자" };
   const getRoleValue = (role) => String(role || "USER").toUpperCase();
   const getRoleLabel = (role) => roleLabels[getRoleValue(role)] || "일반학생";
+  const isDangerMessage = manager.message?.includes("내보낼 수 없습니다") || manager.message?.includes("실패");
 
   return (
     <div className="brain-manager-backdrop" role="presentation" onClick={onClose}>
@@ -24,13 +27,13 @@ export default function BrainManagerPanel({
         <header className="brain-manager-head">
           <div>
             <p className="panel-kicker">BRAIN MANAGEMENT</p>
-            <h2 id="brain-manager-title">{manager.brain?.name || "Brain"} 관리</h2>
-            <span>멤버, 초대, 가입 요청을 관리합니다.</span>
+            <h2 id="brain-manager-title">{manager.brain?.name || "Brain"} {isInfoMode ? "정보" : "관리"}</h2>
+            <span>{isInfoMode ? "Brain 정보와 소속 멤버를 확인합니다." : "멤버, 초대, 가입 요청을 관리합니다."}</span>
           </div>
           <button className="panel-close-button" type="button" onClick={onClose} aria-label="닫기">×</button>
         </header>
 
-        {manager.message && <p className="brain-manager-message" role="status">{manager.message}</p>}
+        {manager.message && <p className={`brain-manager-message ${isDangerMessage ? "is-danger" : ""}`} role="status">{manager.message}</p>}
 
         <div className="brain-manager-scroll">
           <section className="brain-manager-section">
@@ -39,21 +42,23 @@ export default function BrainManagerPanel({
                 <p className="panel-kicker">BRAIN INFO</p>
                 <h3>Brain 정보</h3>
               </div>
-              <button className="primary-button" type="button" onClick={onSaveBrain} disabled={manager.isSaving}>
-                {manager.isSaving ? "저장 중" : "정보 수정"}
-              </button>
+              {!isInfoMode && (
+                <button className="primary-button" type="button" onClick={onSaveBrain} disabled={manager.isSaving}>
+                  {manager.isSaving ? "저장 중" : "정보 수정"}
+                </button>
+              )}
             </div>
             <div className="brain-manager-form">
               <label>
                 <span>Brain 이름</span>
-                <input name="name" type="text" value={form.name} onChange={onChangeForm} maxLength={50} />
+                <input name="name" type="text" value={form.name} onChange={onChangeForm} maxLength={50} disabled={isInfoMode} />
               </label>
               <label>
                 <span>Brain 소개 문구</span>
-                <textarea name="description" value={form.description} onChange={onChangeForm} maxLength={200} rows={3} />
+                <textarea name="description" value={form.description} onChange={onChangeForm} maxLength={200} rows={3} disabled={isInfoMode} />
               </label>
               <label className="policy-toggle">
-                <input name="joinPolicy" type="checkbox" checked={isProtected} onChange={onChangeForm} />
+                <input name="joinPolicy" type="checkbox" checked={isProtected} onChange={onChangeForm} disabled={isInfoMode} />
                 <span>
                   <strong>가입 승인 필요</strong>
                   <small>{isProtected ? "PROTECTED · 승인 후 입장" : "PUBLIC · 누구나 입장"}</small>
@@ -66,15 +71,17 @@ export default function BrainManagerPanel({
             <div className="brain-manager-section-head">
               <div>
                 <p className="panel-kicker">MEMBERS</p>
-                <h3>멤버 초대 및 삭제</h3>
+                <h3>{isInfoMode ? "멤버 카드" : "멤버 초대 및 삭제"}</h3>
               </div>
-              <form className="member-search-form" onSubmit={onSearchAvailableUsers}>
-                <input name="searchKeyword" type="search" value={manager.searchKeyword} onChange={onChangeForm} placeholder="이름 또는 이메일 검색" />
-                <button type="submit">검색</button>
-              </form>
+              {!isInfoMode && (
+                <form className="member-search-form" onSubmit={onSearchAvailableUsers}>
+                  <input name="searchKeyword" type="search" value={manager.searchKeyword} onChange={onChangeForm} placeholder="이름 또는 이메일 검색" />
+                  <button type="submit">검색</button>
+                </form>
+              )}
             </div>
 
-            <div className="brain-manager-grid">
+            <div className={`brain-manager-grid ${isInfoMode ? "is-info-mode" : ""}`}>
               <div className="member-column">
                 <h4>현재 멤버</h4>
                 <div className="member-list">
@@ -86,7 +93,7 @@ export default function BrainManagerPanel({
                         <span className={`member-role-badge is-${getRoleValue(member.brainRole || member.role).toLowerCase()}`}>
                           {getRoleLabel(member.brainRole || member.role)}
                         </span>
-                        {canAdministerWorkspace && (
+                        {!isInfoMode && canAdministerWorkspace && (
                           <select
                             className="member-role-select"
                             value={getRoleValue(member.brainRole || member.role)}
@@ -94,18 +101,18 @@ export default function BrainManagerPanel({
                             aria-label={`${member.name} 권한 변경`}
                           >
                             <option value="USER">일반학생</option>
-                            <option value="MANAGER">반장</option>
+                            <option value="MANAGER">매니저</option>
                             <option value="ADMIN">관리자</option>
                           </select>
                         )}
-                        <button type="button" onClick={() => onRemoveMember(member)}>삭제</button>
+                        {!isInfoMode && <button type="button" onClick={() => onRemoveMember(member)}>삭제</button>}
                       </div>
                     </article>
                   )) : <p className="brain-manager-empty">멤버를 불러오지 못했거나 아직 없습니다.</p>}
                 </div>
               </div>
 
-              <div className="member-column">
+              {!isInfoMode && <div className="member-column">
                 <h4>초대 가능 사용자</h4>
                 <div className="member-list">
                   {manager.availableUsers.length ? manager.availableUsers.map((user) => (
@@ -116,11 +123,11 @@ export default function BrainManagerPanel({
                     </article>
                   )) : <p className="brain-manager-empty">검색 결과가 없습니다.</p>}
                 </div>
-              </div>
+              </div>}
             </div>
           </section>
 
-          <section className="brain-manager-section">
+          {!isInfoMode && <section className="brain-manager-section">
             <div className="brain-manager-section-head">
               <div>
                 <p className="panel-kicker">JOIN REQUESTS</p>
@@ -140,9 +147,25 @@ export default function BrainManagerPanel({
                 </article>
               )) : <p className="brain-manager-empty">대기 중인 가입 요청이 없습니다.</p>}
             </div>
+          </section>}
+
+          <section className="brain-manager-section brain-leave-section">
+            <div>
+              <p className="panel-kicker">{isInfoMode ? "LEAVE BRAIN" : "MEMBERSHIP"}</p>
+              <h3>Brain 탈퇴</h3>
+              <span>이 Brain의 멤버 목록에서 내 계정을 제거합니다.</span>
+            </div>
+            <button
+              className="leave-button"
+              type="button"
+              onClick={onLeaveBrain}
+              disabled={manager.isLeaving}
+            >
+              {manager.isLeaving ? "탈퇴 중" : "Brain 탈퇴"}
+            </button>
           </section>
 
-          {canAdministerWorkspace && (
+          {!isInfoMode && canAdministerWorkspace && (
             <section className="brain-manager-section brain-danger-section">
               <div>
                 <p className="panel-kicker">DANGER ZONE</p>
