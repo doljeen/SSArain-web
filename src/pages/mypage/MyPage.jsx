@@ -62,15 +62,21 @@ const formatActivityDate = (value) => {
 
 const getActivityTotal = (page) => Number(page?.totalElements ?? page?.activities?.length ?? 0);
 
-const getNeuronRoute = (activity) => {
-  if (activity?.bid && activity?.tid && activity?.nid) return `/brains/${activity.bid}/topics/${activity.tid}/nodes/${activity.nid}`;
-  if (activity?.bid && activity?.tid) return `/brains/${activity.bid}/topics/${activity.tid}/posts`;
+const getBrainId = (brain) => String(brain?.id ?? brain?.bid ?? brain?.brainId ?? "");
+
+const getNeuronRoute = (activity, joinedBrainIds = new Set()) => {
+  const brainId = activity?.bid == null ? "" : String(activity.bid);
+  const isJoinedBrain = brainId && joinedBrainIds.has(brainId);
+  const previewSegment = brainId && !isJoinedBrain ? "/preview" : "";
+
+  if (activity?.bid && activity?.tid && activity?.nid) return `/brains/${activity.bid}${previewSegment}/topics/${activity.tid}/nodes/${activity.nid}`;
+  if (activity?.bid && activity?.tid) return `/brains/${activity.bid}${previewSegment}/topics/${activity.tid}/posts`;
   if (activity?.nid) return `/nodes/${activity.nid}`;
   if (activity?.tid) return `/topics/${activity.tid}/posts`;
   return "/main";
 };
 
-const normalizeNeuronActivities = (page, emptyLabel, metaPrefix = "작성일") => ({
+const normalizeNeuronActivities = (page, emptyLabel, metaPrefix = "작성일", joinedBrainIds = new Set()) => ({
   count: getActivityTotal(page),
   hasLoaded: true,
   items: (page?.activities || []).map((activity, index) => {
@@ -79,12 +85,12 @@ const normalizeNeuronActivities = (page, emptyLabel, metaPrefix = "작성일") =
       id: `neuron-${activity.nid ?? index}`,
       title: activity.title || emptyLabel,
       meta: dateText ? `${metaPrefix} ${dateText}` : `${metaPrefix} 정보 없음`,
-      route: getNeuronRoute(activity)
+      route: getNeuronRoute(activity, joinedBrainIds)
     };
   })
 });
 
-const normalizeCommentActivities = (page) => ({
+const normalizeCommentActivities = (page, joinedBrainIds = new Set()) => ({
   count: getActivityTotal(page),
   hasLoaded: true,
   items: (page?.activities || []).map((activity, index) => {
@@ -93,7 +99,7 @@ const normalizeCommentActivities = (page) => ({
       id: `comment-${activity.cid ?? index}`,
       title: activity.content || "내용 없는 댓글",
       meta: dateText ? `댓글 작성일 ${dateText}` : "작성일 정보 없음",
-      route: getNeuronRoute(activity)
+      route: getNeuronRoute(activity, joinedBrainIds)
     };
   })
 });
@@ -153,7 +159,7 @@ export default function MyPage() {
 
   // 마이페이지 진입 시 로그인된 사용자의 정보를 조회합니다.
   useEffect(() => {
-    const loadActivities = async () => {
+    const loadActivities = async (joinedBrainIds = new Set()) => {
       setIsActivityLoading(true);
       setActivityStatus("");
 
@@ -165,13 +171,13 @@ export default function MyPage() {
 
       setActivityData({
         nodes: neuronsResult.status === "fulfilled"
-          ? normalizeNeuronActivities(neuronsResult.value, "제목 없는 Neuron")
+          ? normalizeNeuronActivities(neuronsResult.value, "제목 없는 Neuron", "작성일", joinedBrainIds)
           : { ...initialActivityData.nodes, hasLoaded: true },
         comments: commentsResult.status === "fulfilled"
-          ? normalizeCommentActivities(commentsResult.value)
+          ? normalizeCommentActivities(commentsResult.value, joinedBrainIds)
           : { ...initialActivityData.comments, hasLoaded: true },
         thumbs: likedResult.status === "fulfilled"
-          ? normalizeNeuronActivities(likedResult.value, "제목 없는 Neuron", "추천한 Neuron")
+          ? normalizeNeuronActivities(likedResult.value, "제목 없는 Neuron", "추천한 Neuron", joinedBrainIds)
           : { ...initialActivityData.thumbs, hasLoaded: true }
       });
 
@@ -187,12 +193,16 @@ export default function MyPage() {
       setStatus("");
 
       try {
-        const userInfo = await apiGet(endpoints.users.me);
+        const [userInfo, myBrains] = await Promise.all([
+          apiGet(endpoints.users.me),
+          apiGet(endpoints.brains.mine).catch(() => ({ brains: [] }))
+        ]);
         if (userInfo) {
           sessionStorage.setItem(AUTH_STATE_KEY, "true");
           setUser(normalizeUserInfo(userInfo));
         }
-        loadActivities();
+        const joinedBrainIds = new Set((myBrains?.brains || []).map(getBrainId).filter(Boolean));
+        loadActivities(joinedBrainIds);
       } catch (error) {
         if (isAuthError(error)) {
           sessionStorage.removeItem(AUTH_STATE_KEY);
