@@ -77,7 +77,17 @@ export default function TopicManagerPanel({
     setSearchKeyword(search?.query || "");
   }, [search?.query]);
 
-  // Topic 관리 트리의 펼침 상태입니다. 검색 모드에서는 위치 확인을 위해 모두 펼쳐집니다.
+  // 검색 결과는 부모 경로만 기본으로 펼치고, 이후 하위 Topic은 사용자가 접고 펼칠 수 있게 둡니다.
+  useEffect(() => {
+    if (!search?.isSearching) {
+      setExpanded({});
+      return;
+    }
+    const expandedIds = search?.expandedTopicIds || [];
+    setExpanded(Object.fromEntries(expandedIds.map((id) => [String(id), true])));
+  }, [search?.isSearching, search?.expandedTopicIds]);
+
+  // Topic 관리 트리의 펼침 상태입니다.
   const toggleExpand = (topicId) => {
     setExpanded((current) => ({ ...current, [topicId]: !current[topicId] }));
   };
@@ -158,7 +168,7 @@ export default function TopicManagerPanel({
         const children = topic.children || [];
         const hasChildren = children.length > 0;
         const isUsing = isTopicUsing(topic.isUsing);
-        const isExpanded = isSearchMode || Boolean(expanded[topic.id]);
+        const isExpanded = Boolean(expanded[topic.id]);
         const isMatch = matchedTopicIds.has(String(topic.id));
 
         return (

@@ -392,6 +392,18 @@ const getTopicSearchMatchIds = (paths = []) => paths
   .filter((id) => id != null)
   .map(String);
 
+const getTopicSearchExpandedIds = (paths = []) => {
+  const ids = new Set();
+  paths.forEach((path) => {
+    if (!Array.isArray(path)) return;
+    path.slice(0, -1).forEach((topic) => {
+      const id = topicRawId(topic);
+      if (id != null) ids.add(String(id));
+    });
+  });
+  return [...ids];
+};
+
 export default function MainPage() {
   // ===== 공통 화면 상태 =====
   // 화면 전체에서 쓰는 데이터입니다. WAS 응답 전에는 mock 대신 빈 상태를 보여줍니다.
@@ -437,6 +449,7 @@ export default function MainPage() {
     isLoading: false,
     topics: [],
     matchedTopicIds: [],
+    expandedTopicIds: [],
     message: ""
   });
   const [openBrainTabs, setOpenBrainTabs] = useState([]);
@@ -2029,6 +2042,7 @@ export default function MainPage() {
       isLoading: false,
       topics: [],
       matchedTopicIds: [],
+      expandedTopicIds: [],
       message: ""
     });
     setTopicPanelMode("manage");
@@ -2042,6 +2056,7 @@ export default function MainPage() {
       isLoading: false,
       topics: [],
       matchedTopicIds: [],
+      expandedTopicIds: [],
       message: ""
     });
   };
@@ -2062,6 +2077,7 @@ export default function MainPage() {
         isLoading: false,
         topics: [],
         matchedTopicIds: [],
+        expandedTopicIds: [],
         message: "Brain을 먼저 선택해주세요."
       }));
       return;
@@ -2079,13 +2095,19 @@ export default function MainPage() {
       const result = await apiGet(endpoints.topics.searchParents(queryText, activeBrain.id));
       const paths = Array.isArray(result?.topics) ? result.topics : [];
       const searchTree = buildTopicSearchTree(paths, topicCatalog);
+      const searchBranches = await Promise.all(
+        searchTree.map((topic) => loadTopicBranchFromT02(topic, activeBrain.id))
+      );
+      const hydratedSearchTree = markAncestorUsing(applyTopicUseMap(searchBranches, topicUseMap(topicCatalog)));
       const matchedTopicIds = getTopicSearchMatchIds(paths);
+      const expandedTopicIds = getTopicSearchExpandedIds(paths);
       setTopicSearch({
         query: queryText,
         isSearching: true,
         isLoading: false,
-        topics: searchTree,
+        topics: hydratedSearchTree,
         matchedTopicIds,
+        expandedTopicIds,
         message: paths.length ? `${matchedTopicIds.length}개 검색 결과` : "검색 결과가 없습니다."
       });
     } catch (error) {
@@ -2095,6 +2117,7 @@ export default function MainPage() {
         isLoading: false,
         topics: [],
         matchedTopicIds: [],
+        expandedTopicIds: [],
         message: `토픽 검색 실패 · ${error.message}`
       });
     }

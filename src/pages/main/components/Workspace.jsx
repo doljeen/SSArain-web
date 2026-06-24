@@ -563,25 +563,25 @@ export default function Workspace({
         <section className="brain-search-view" aria-labelledby="brain-search-heading">
           <form className="brain-search-form" onSubmit={submitBrainSearch}>
             <label htmlFor="brain-search-input" className="sr-only">Brain 명 검색</label>
-            <div className="brain-search-row">
+            <div className="brain-search-field">
+              <Icon name="search" />
               <input
                 id="brain-search-input"
                 name="brainKeyword"
                 type="search"
                 defaultValue={brainSearch.query}
-                placeholder="Brain 명 검색"
+                placeholder="찾고 싶은 Brain 이름을 입력하세요"
               />
-
-              <label className="brain-search-checkbox">
+              <label className="brain-search-filter">
                 <input
                   name="excludeJoined"
                   type="checkbox"
                   defaultChecked={!brainSearch.includeJoined}
                 />
-                내가 소속된 Brain 제외
+                <span>소속 Brain 제외</span>
               </label>
+              <button type="submit" disabled={brainSearch.isLoading}>{brainSearch.isLoading ? "검색 중" : "검색"}</button>
             </div>
-            <button type="submit" disabled={brainSearch.isLoading}>{brainSearch.isLoading ? "검색 중" : "검색"}</button>
           </form>
 
           <div className="brain-search-summary">
