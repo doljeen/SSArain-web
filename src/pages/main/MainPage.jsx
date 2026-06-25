@@ -27,6 +27,7 @@ const MAX_GRAPH_SCALE = 2.2;
 const MAX_GRAPH_PAN_X = 3200;
 const MAX_GRAPH_PAN_Y = 2200;
 const NODE_CONTENT_BYTE_LIMIT = 20000;
+const COMMENT_CHAR_LIMIT = 250;
 const BRAIN_TOPIC_TREE_DEPTH = 5;
 const textEncoder = new TextEncoder();
 
@@ -114,6 +115,13 @@ const canAdministerRole = (role) => ADMIN_ROLE_NAMES.includes(normalizeRoleValue
 
 // Neuron 본문은 WAS 제한에 맞춰 byte 단위로 길이를 계산합니다.
 const getByteLength = (value) => textEncoder.encode(value || "").length;
+
+const getTextLength = (value) => Array.from(value || "").length;
+
+const truncateCommentContent = (value) => {
+  const chars = Array.from(value || "");
+  return chars.length > COMMENT_CHAR_LIMIT ? chars.slice(0, COMMENT_CHAR_LIMIT).join("") : value || "";
+};
 
 const truncateToByteLimit = (value, limit) => {
   let currentBytes = 0;
@@ -1762,7 +1770,15 @@ export default function MainPage() {
   };
 
   const updateCommentDraft = (event) => {
-    setCommentDraft((current) => ({ ...current, content: event.target.value, status: "" }));
+    const rawContent = event.target.value;
+    const nextContent = truncateCommentContent(rawContent);
+    const isTruncated = nextContent !== rawContent;
+
+    setCommentDraft((current) => ({
+      ...current,
+      content: nextContent,
+      status: isTruncated ? `댓글은 ${COMMENT_CHAR_LIMIT}자까지 작성할 수 있습니다.` : ""
+    }));
   };
 
   const resetCommentDraft = () => {
@@ -1862,6 +1878,14 @@ export default function MainPage() {
       setCommentDraft((current) => ({ ...current, status: "댓글 내용을 입력해주세요." }));
       return;
     }
+    if (getTextLength(content) > COMMENT_CHAR_LIMIT) {
+      setCommentDraft((current) => ({
+        ...current,
+        content: truncateCommentContent(content),
+        status: `댓글은 ${COMMENT_CHAR_LIMIT}자까지 작성할 수 있습니다.`
+      }));
+      return;
+    }
 
     setCommentDraft((current) => ({ ...current, isSubmitting: true, status: "" }));
 
@@ -1926,7 +1950,7 @@ export default function MainPage() {
       return;
     }
 
-    setCommentDraft({ content: comment.content || "", status: "", isSubmitting: false, parentId: null, editingId: String(comment.id) });
+    setCommentDraft({ content: truncateCommentContent(comment.content || ""), status: "", isSubmitting: false, parentId: null, editingId: String(comment.id) });
   };
 
   const deleteComment = async (comment) => {
@@ -2640,6 +2664,7 @@ export default function MainPage() {
         quizGenerationCount={Number(quizGenerationCounts[String(activeTopic?.btid)] || 0)}
         quizGenerationLimit={QUIZ_GENERATION_LIMIT}
         commentDraft={commentDraft}
+        commentLimit={COMMENT_CHAR_LIMIT}
         canWriteComment={isAuthenticated}
         canDeleteNode={canDeleteNode(nodeDetail.data)}
         onCloseNodeDetail={closeNodeDetail}

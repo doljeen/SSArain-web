@@ -304,6 +304,7 @@ export default function Workspace({
   quizGenerationCount,
   quizGenerationLimit,
   commentDraft,
+  commentLimit = 85,
   canWriteComment,
   canDeleteNode,
   onCloseNodeDetail,
@@ -370,6 +371,7 @@ export default function Workspace({
     const targetId = commentDraft.editingId || commentDraft.parentId;
     return nodeDetail.data.comments.find((comment) => String(comment.id) === String(targetId)) || null;
   }, [commentDraft.editingId, commentDraft.parentId, nodeDetail?.data]);
+  const commentLength = useMemo(() => Array.from(commentDraft.content || "").length, [commentDraft.content]);
   const currentUserName = pageData.user?.name || "";
   const canModerateComments = canManageWorkspace;
   const canGenerateQuiz = canManageWorkspace && manageMode;
@@ -775,9 +777,12 @@ export default function Workspace({
                           <button type="button" onClick={onCancelCommentDraft}>취소</button>
                         </div>
                       )}
-                      <textarea value={commentDraft.content} onChange={onUpdateCommentDraft} placeholder={commentDraft.parentId ? "답글을 입력해주세요." : "댓글을 입력해주세요."} maxLength={255} rows={4} />
+                      <textarea value={commentDraft.content} onChange={onUpdateCommentDraft} placeholder={commentDraft.parentId ? "답글을 입력해주세요." : "댓글을 입력해주세요."} rows={4} />
                       <div className="comment-form-actions">
-                        {commentDraft.status && <span role="status">{commentDraft.status}</span>}
+                        <div className="comment-form-feedback">
+                          {commentDraft.status && <span role="status">{commentDraft.status}</span>}
+                          <small className={commentLength >= commentLimit ? "is-limit" : ""}>{commentLength} / {commentLimit}</small>
+                        </div>
                         <button type="submit" disabled={commentDraft.isSubmitting}>
                           {commentDraft.isSubmitting ? "저장 중" : (commentDraft.editingId ? "댓글 수정" : (commentDraft.parentId ? "답글 작성" : "댓글 작성"))}
                         </button>

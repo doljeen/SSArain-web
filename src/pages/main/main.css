@@ -2590,15 +2590,35 @@ button {
 
 .comment-form-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   gap: 12px;
 }
 
-.comment-form-actions span {
+.comment-form-feedback {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #8090a7;
+  font-size: 13px;
+  font-weight: 820;
+}
+
+.comment-form-feedback span {
   color: #ef4444;
   font-size: 13px;
   font-weight: 820;
+}
+
+.comment-form-feedback small {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.comment-form-feedback small.is-limit {
+  color: #ef4444;
 }
 
 .comment-form button {
