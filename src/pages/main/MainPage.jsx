@@ -11,6 +11,7 @@ import TopicManagerPanel from "./components/TopicManagerPanel.jsx";
 import Workspace from "./components/Workspace.jsx";
 import { createModalCopy } from "./config/modalConfig.js";
 import { buildTopicTree, clone, flattenTopics, normalizeBrain, normalizeComments, normalizeNodeDetail, normalizeNodes, normalizeQuizzes, normalizeUserInfo } from "./config/mainUtils.js";
+import { collectTopicLayoutPoints } from "./config/topicLayout.js";
 
 // SSArain의 메인 페이지 컨트롤러입니다.
 // 왼쪽 Sidebar, 중앙 Workspace, 오른쪽 InsightsPanel에 필요한 상태와 API 호출을 이 파일에서 조율합니다.
@@ -23,7 +24,7 @@ const SIDEBAR_WIDTH_KEY = "ssarain-sidebar-width";
 const QUIZ_GENERATION_LIMIT = 2;
 const MIN_SIDEBAR_WIDTH = 292;
 const MAX_SIDEBAR_WIDTH = 520;
-const MIN_GRAPH_SCALE = 0.18;
+const MIN_GRAPH_SCALE = 0.12;
 const MAX_GRAPH_SCALE = 2.2;
 const MAX_GRAPH_PAN_X = 3200;
 const MAX_GRAPH_PAN_Y = 2200;
@@ -70,13 +71,13 @@ const clampGraph = (graphState) => ({
   scale: clamp(graphState.scale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE),
   x: clamp(
     graphState.x,
-    -(MAX_GRAPH_PAN_X + ((clamp(graphState.scale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE) - 1) * 2400)),
-    MAX_GRAPH_PAN_X + ((clamp(graphState.scale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE) - 1) * 2400)
+    -(MAX_GRAPH_PAN_X + (Math.max(0, clamp(graphState.scale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE) - 1) * 2400)),
+    MAX_GRAPH_PAN_X + (Math.max(0, clamp(graphState.scale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE) - 1) * 2400)
   ),
   y: clamp(
     graphState.y,
-    -(MAX_GRAPH_PAN_Y + ((clamp(graphState.scale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE) - 1) * 1700)),
-    MAX_GRAPH_PAN_Y + ((clamp(graphState.scale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE) - 1) * 1700)
+    -(MAX_GRAPH_PAN_Y + (Math.max(0, clamp(graphState.scale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE) - 1) * 1700)),
+    MAX_GRAPH_PAN_Y + (Math.max(0, clamp(graphState.scale, MIN_GRAPH_SCALE, MAX_GRAPH_SCALE) - 1) * 1700)
   )
 });
 
@@ -226,57 +227,6 @@ const updateBrainUserRole = (users, userId, role) => users.map((user) => (
     : user
 ));
 const formatBrainRole = (role) => ROLE_LABELS[normalizeRoleValue(role)] || role || "일반학생";
-// Synapse 지도에서 최상위 Topic을 넓게 배치하기 위한 기본 좌표입니다.
-const rootScatterPositions = [
-  { x: -1040, y: -420 },
-  { x: 1080, y: 420 },
-  { x: 0, y: 0 },
-  { x: -560, y: 650 },
-  { x: 620, y: -650 },
-  { x: -1360, y: 210 },
-  { x: 1400, y: -210 },
-  { x: -1460, y: -700 },
-  { x: 1500, y: 720 }
-];
-
-// Sidebar/Topic 클릭 시 Workspace 그래프의 실제 좌표로 카메라를 이동하기 위해 Topic 좌표를 계산합니다.
-const collectTopicLayoutPoints = (rootTopics) => {
-  const points = [];
-  const rootNodes = rootTopics.map((rootTopic, index) => {
-    const base = rootTopics.length === 1 ? { x: 0, y: 0 } : rootScatterPositions[index % rootScatterPositions.length];
-    const ring = Math.floor(index / rootScatterPositions.length);
-    const node = {
-      topic: rootTopic,
-      x: base.x + (ring * 180),
-      y: base.y + (ring * 130)
-    };
-    points.push(node);
-    return node;
-  });
-
-  const layoutChildren = (parentTopic, parentNode, depth = 1, branchSide = null) => {
-    const children = parentTopic.children || [];
-
-    children.forEach((child, index) => {
-      const side = branchSide || (index % 2 === 0 ? 1 : -1);
-      const sameSideIndex = children.slice(0, index).filter((_, childIndex) => (branchSide || (childIndex % 2 === 0 ? 1 : -1)) === side).length;
-      const sameSideTotal = children.filter((_, childIndex) => (branchSide || (childIndex % 2 === 0 ? 1 : -1)) === side).length;
-      const yOffset = (sameSideIndex - ((sameSideTotal - 1) / 2)) * (depth === 1 ? 290 : 230);
-      const node = {
-        topic: child,
-        x: parentNode.x + (side * (depth === 1 ? 500 : 400)),
-        y: parentNode.y + yOffset
-      };
-
-      points.push(node);
-      layoutChildren(child, node, depth + 1, side);
-    });
-  };
-
-  rootNodes.forEach((rootNode) => layoutChildren(rootNode.topic, rootNode));
-  return points;
-};
-
 // Topic 트리의 표시/숨김, btid 갱신, 자식 추가를 불변 업데이트로 처리하는 헬퍼들입니다.
 const mapTopicTree = (topics, mapper) => topics.map((topic) => {
   const nextTopic = mapper(topic);
@@ -417,7 +367,7 @@ export default function MainPage() {
     return Number.isFinite(savedWidth) ? clamp(savedWidth, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH) : MIN_SIDEBAR_WIDTH;
   });
   const [view, setView] = useState("synapse");
-  const [graph, setGraph] = useState({ x: 0, y: 0, scale: 1, tilt: 0 });
+  const [graph, setGraph] = useState({ x: 0, y: 0, scale: MIN_GRAPH_SCALE, tilt: 0 });
   const [authStatus, setAuthStatus] = useState(() => sessionStorage.getItem(AUTH_STATE_KEY) === "true" ? "authenticated" : "guest");
 
   // 모달, 토스트, API 연결 상태, 그래프 이동 애니메이션 상태입니다.
@@ -478,6 +428,7 @@ export default function MainPage() {
   const commonTopicCatalog = useRef([]);
   const brainTabState = useRef({});
   const workspaceLoadSeq = useRef(0);
+  const shouldFitGraphAfterLoad = useRef(false);
 
   // ===== 현재 선택된 Brain/Topic과 권한 계산 =====
   // 트리 구조의 토픽을 펼쳐서 현재 선택된 Brain/Topic을 계산합니다.
@@ -596,7 +547,7 @@ export default function MainPage() {
       quizStatusByTopicId: clone(cachedState.quizStatusByTopicId || {})
     }));
     setTopicCatalog(clone(cachedState.topicCatalog || []));
-    setGraph(clampGraph(cachedState.graph || { x: 0, y: 0, scale: 1, tilt: 0 }));
+    setGraph(clampGraph(cachedState.graph || { x: 0, y: 0, scale: MIN_GRAPH_SCALE, tilt: 0 }));
     setView(cachedState.view || "synapse");
     return true;
   };
@@ -686,29 +637,12 @@ export default function MainPage() {
     return Object.fromEntries(entries);
   };
 
-  // 현재 화면에 보이는 Topic들만 퀴즈 생성 여부를 확인해 Q 배지를 붙입니다.
-  const fetchVisibleTopicQuizStatuses = async (topics = []) => {
-    const flatTopics = flattenTopics(topics).filter((topic) => topic?.btid);
-    const entries = await Promise.all(flatTopics.map(async (topic) => {
-      try {
-        const result = await apiGet(endpoints.quizzes.list(topic.btid));
-        const quizCount = Array.isArray(result?.quizzes) ? result.quizzes.length : 0;
-        return [String(topic.id), { hasQuiz: quizCount > 0, quizCount }];
-      } catch (error) {
-        return [String(topic.id), { hasQuiz: false, quizCount: 0 }];
-      }
-    }));
-    return Object.fromEntries(entries);
-  };
-
-  // Brain 화면을 먼저 띄운 뒤, Neuron 미리보기와 퀴즈 배지는 백그라운드로 채웁니다.
+  // Brain 화면을 먼저 띄운 뒤, Neuron 미리보기만 백그라운드로 채웁니다.
+  // 퀴즈 목록은 서버 부하를 줄이기 위해 "퀴즈를 확인해보세요" 진입 시점에만 조회합니다.
   const hydrateVisibleTopicExtras = (brainId, visibleTopics = [], requestId = workspaceLoadSeq.current) => {
     window.setTimeout(async () => {
       try {
-        const [nextTopicNodesById, nextQuizStatusByTopicId] = await Promise.all([
-          fetchVisibleTopicNodePreviews(brainId, visibleTopics),
-          fetchVisibleTopicQuizStatuses(visibleTopics)
-        ]);
+        const nextTopicNodesById = await fetchVisibleTopicNodePreviews(brainId, visibleTopics);
         if (requestId !== workspaceLoadSeq.current) return;
         setPageData((current) => {
           if (String(current.activeBrainId) !== String(brainId)) return current;
@@ -717,10 +651,6 @@ export default function MainPage() {
             topicNodesById: {
               ...(current.topicNodesById || {}),
               ...nextTopicNodesById
-            },
-            quizStatusByTopicId: {
-              ...(current.quizStatusByTopicId || {}),
-              ...nextQuizStatusByTopicId
             },
             nodes: current.activeTopicId && nextTopicNodesById[String(current.activeTopicId)]
               ? nextTopicNodesById[String(current.activeTopicId)]
@@ -851,7 +781,6 @@ export default function MainPage() {
     setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
     setView("quiz");
     handleRouteClick(event, buildTopicRoute(activeBrain?.id, activeTopic.id, "quiz", { preview: isBrainPreview }));
-    loadTopicQuizzes(activeTopic);
   };
 
   const loadNodeDetail = async (nodeId) => {
@@ -1052,6 +981,7 @@ export default function MainPage() {
       setTopicCatalog(catalogTopics);
       if (selectedBrain) rememberTopicCatalog(selectedBrain.id, catalogTopics);
       const normalizedUser = normalizeUserInfo(userInfo);
+      shouldFitGraphAfterLoad.current = Boolean(selectedBrain && topics.length && getViewFromRoute(route) === "synapse");
       setPageData((current) => ({
         ...current,
         user: normalizedUser,
@@ -1134,7 +1064,7 @@ export default function MainPage() {
     }));
     setView("synapse");
     setManageMode(false);
-    setGraph(clampGraph({ x: 0, y: 0, scale: 1, tilt: 0 }));
+    setGraph(clampGraph({ x: 0, y: 0, scale: MIN_GRAPH_SCALE, tilt: 0 }));
     handleRouteClick(event, previewRoute);
     loadBrainWorkspace(previewBrain.id, null, { view: "synapse", preview: true, previewBrain });
   };
@@ -1287,7 +1217,9 @@ export default function MainPage() {
   };
 
   useEffect(() => {
-    if (view !== "synapse" || !activeBrain || activeTopic || !topicLayoutPoints.length) return;
+    if (view !== "synapse" || !activeBrain || !topicLayoutPoints.length) return;
+    if (activeTopic && !shouldFitGraphAfterLoad.current) return;
+    shouldFitGraphAfterLoad.current = false;
     window.requestAnimationFrame(() => {
       fitGraphToTopics();
     });
@@ -1561,7 +1493,7 @@ export default function MainPage() {
         quizStatusByTopicId: {}
       }));
       setView("synapse");
-      setGraph(clampGraph({ x: 0, y: 0, scale: 1, tilt: 0 }));
+      setGraph(clampGraph({ x: 0, y: 0, scale: MIN_GRAPH_SCALE, tilt: 0 }));
     }
 
     handleRouteClick(event, nextRoute);
@@ -1622,6 +1554,19 @@ export default function MainPage() {
 
     const selectedTopic = topicsFlat.find((topic) => String(topic.id) === String(topicId)) || null;
 
+    if (!shouldOpenPosts && activeTopic && String(activeTopic.id) === String(topicId)) {
+      const nextRoute = activeBrain?.id ? `/brains/${activeBrain.id}${isBrainPreview ? "/preview" : ""}` : "/main/synapse";
+      setView("synapse");
+      setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
+      setPageData((current) => ({
+        ...current,
+        activeTopicId: null,
+        nodes: []
+      }));
+      if (shouldUpdateRoute) handleRouteClick(event, nextRoute);
+      return;
+    }
+
     if (shouldOpenPosts) {
       setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
       setView("posts");
@@ -1647,7 +1592,7 @@ export default function MainPage() {
     }
 
     const targetPoint = topicLayoutPoints.find((point) => String(point.topic.id) === String(topicId));
-    if (targetPoint) focusGraphPoint(targetPoint.x, targetPoint.y, 0.88);
+    if (targetPoint) focusGraphPoint(targetPoint.x, targetPoint.y, 0.67);
 
     setView("synapse");
     setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });

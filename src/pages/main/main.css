@@ -297,7 +297,43 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 0 0 22px 8px;
+  margin: 0 0 12px 8px;
+}
+
+.sidebar-topic-search {
+  height: 38px;
+  margin: 0 0 14px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #e4ebf5;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #94a4bc;
+}
+
+.sidebar-topic-search .icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.sidebar-topic-search input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #253246;
+  font-size: 13px;
+  font-weight: 820;
+}
+
+.sidebar-topic-search:focus-within {
+  border-color: rgba(101, 87, 255, 0.42);
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(101, 87, 255, 0.08);
 }
 
 .icon-button {
@@ -343,6 +379,15 @@ button {
 
 .tree-node.is-active .icon {
   color: var(--color-purple-strong);
+}
+
+.tree-node.is-search-match:not(.is-active) {
+  background: #f5f3ff;
+  color: #4f46e5;
+}
+
+.tree-node.is-search-match:not(.is-active) .icon {
+  color: #6d5dfc;
 }
 
 .tree-toggle {
@@ -410,6 +455,17 @@ button {
   bottom: -2px;
   width: 1px;
   background: #e7edf5;
+}
+
+.sidebar-topic-empty {
+  margin: 12px 2px;
+  padding: 14px;
+  border: 1px dashed #dfe7f2;
+  border-radius: 12px;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
 }
 
 /* Sidebar - 사용자 하단 영역: 마이페이지 진입과 로그아웃 버튼입니다. */
@@ -853,9 +909,9 @@ button {
   position: absolute;
   left: 50%;
   top: 52%;
-  width: min(3000px, calc(100vw - 500px));
-  min-width: 2300px;
-  height: 1400px;
+  width: min(4200px, calc(100vw - 500px));
+  min-width: 3200px;
+  height: 2200px;
   transform: translate(-50%, -50%);
 }
 
@@ -879,9 +935,14 @@ button {
   text-align: center;
   line-height: 1.15;
   box-shadow: 0 12px 28px rgba(37, 50, 70, 0.1);
-  transform: translate(calc(var(--node-x) - 50%), calc(var(--node-y) - 50%));
+  transform: translate(calc(var(--node-x) - 50%), calc(var(--node-y) - 50%)) scale(var(--topic-scale, 1));
   overflow: visible;
   z-index: 28;
+  transition:
+    opacity 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 .topic-map-node .topic-title {
@@ -943,19 +1004,42 @@ button {
 
 .topic-map-node.is-root.is-active {
   border-color: #6d5dfc;
-  box-shadow: 0 22px 48px rgba(109, 93, 252, 0.28);
+  background: #080d1f;
+  box-shadow:
+    0 0 0 8px rgba(109, 93, 252, 0.12),
+    0 26px 54px rgba(109, 93, 252, 0.34);
+  z-index: 46;
 }
 
 .topic-map-node.is-path {
   border-color: #b9c7ff;
   color: #4f46e5;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 5px rgba(109, 93, 252, 0.08),
+    0 18px 38px rgba(109, 93, 252, 0.16);
+  z-index: 42;
 }
 
 .topic-map-node.is-selected {
   border-color: #6d5dfc;
   color: #4f46e5;
-  box-shadow: 0 16px 34px rgba(109, 93, 252, 0.2);
-  z-index: 32;
+  box-shadow:
+    0 0 0 7px rgba(109, 93, 252, 0.13),
+    0 22px 44px rgba(109, 93, 252, 0.24);
+  z-index: 48;
+}
+
+.topic-map-node.is-dimmed {
+  opacity: 0.38;
+  box-shadow: 0 8px 18px rgba(37, 50, 70, 0.05);
+  z-index: 12;
+}
+
+.topic-map-node.is-dimmed:hover,
+.topic-map-node.is-dimmed:focus-visible {
+  opacity: 1;
+  z-index: 52;
 }
 
 .topic-map-node.is-small {
@@ -974,6 +1058,18 @@ button {
   transform: translate(var(--from-x), var(--from-y)) rotate(var(--line-angle));
   transform-origin: left center;
   z-index: 1;
+  transition: opacity 160ms ease, background 160ms ease, height 160ms ease;
+}
+
+.topic-map-link.is-path {
+  height: 3px;
+  background: linear-gradient(90deg, rgba(109, 93, 252, 0.88), rgba(125, 139, 255, 0.58));
+  opacity: 0.95;
+  z-index: 3;
+}
+
+.topic-map-link.is-dimmed {
+  opacity: 0.22;
 }
 
 .topic-map-hint {
@@ -1016,7 +1112,10 @@ button {
 }
 
 .neuron-map-link.is-main.is-selected-topic {
-  opacity: 0.74;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, rgba(101, 87, 255, 0.7) 0 7px, transparent 7px 12px);
+  opacity: 0.95;
+  z-index: 5;
 }
 
 .neuron-map-node {
@@ -1071,12 +1170,30 @@ button {
 }
 
 .neuron-map-node.is-main.is-selected-topic {
-  border-color: #cfd9ff;
+  border-color: #7c6cff;
+  border-width: 2px;
   opacity: 1;
+  box-shadow:
+    0 0 0 4px rgba(101, 87, 255, 0.14),
+    0 8px 18px rgba(101, 87, 255, 0.14);
+  z-index: 16;
 }
 
 .neuron-map-node.is-main.is-expanded {
   z-index: 18;
+}
+
+.neuron-map-node.is-main.is-selected-topic.is-expanded {
+  border-color: #cfd9ff;
+  box-shadow:
+    0 12px 28px rgba(37, 50, 70, 0.12);
+}
+
+.neuron-map-node.is-main.is-selected-topic:not(.is-expanded) {
+  border-color: #5f50ff;
+  box-shadow:
+    0 0 0 5px rgba(101, 87, 255, 0.16),
+    0 10px 22px rgba(101, 87, 255, 0.2);
 }
 
 .neuron-map-node.is-main.is-expanded,

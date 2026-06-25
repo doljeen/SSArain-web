@@ -1,5 +1,6 @@
 import { memo, useMemo, useState } from "react";
 import Icon from "../../../shared/icons/Icon.jsx";
+import { collectTopicMap, findTopicPath } from "../config/topicLayout.js";
 
 // MainPage의 중앙 작업 영역입니다.
 // Synapse 그래프, Post List, Quiz, Neuron 상세/댓글, Brain 검색 화면을 렌더링합니다.
@@ -15,19 +16,6 @@ const lineStyle = (fromX, fromY, toX, toY) => {
     "--line-angle": `${Math.atan2(dy, dx) * (180 / Math.PI)}deg`
   };
 };
-
-// 최상위 Topic은 격자처럼 딱 맞추기보다 넓게 흩뿌려 Brain 전체 지도를 만듭니다.
-const rootScatterPositions = [
-  { x: -1040, y: -420 },
-  { x: 1080, y: 420 },
-  { x: 0, y: 0 },
-  { x: -560, y: 650 },
-  { x: 620, y: -650 },
-  { x: -1360, y: 210 },
-  { x: 1400, y: -210 },
-  { x: -1460, y: -700 },
-  { x: 1500, y: 720 }
-];
 
 // Neuron 카드가 Topic 원/카드를 덮지 않도록 Topic 주변에 충돌 영역을 잡습니다.
 const topicBlockerForNode = (topicNode) => {
@@ -120,70 +108,6 @@ const findOpenNeuronPosition = ({ topicNode, angle, radius, blockers, width, hei
   };
 };
 
-// Breadcrumb과 선택 Topic 강조를 위해 루트부터 선택 Topic까지의 경로를 찾습니다.
-const findTopicPath = (topics, topicId, path = []) => {
-  for (const topic of topics) {
-    const nextPath = [...path, topic];
-    if (String(topic.id) === String(topicId)) return nextPath;
-    const childPath = findTopicPath(topic.children || [], topicId, nextPath);
-    if (childPath.length) return childPath;
-  }
-  return [];
-};
-
-// Topic 트리를 그래프 좌표, 연결선, 선택 경로 정보로 변환합니다.
-const collectTopicMap = (rootTopics, activeTopicId) => {
-  const activePath = findTopicPath(rootTopics, activeTopicId);
-  const activeRoot = activePath[0] || null;
-  const selectedTopic = activePath[activePath.length - 1] || null;
-
-  const rootNodes = rootTopics.map((rootTopic, index) => {
-    const base = rootTopics.length === 1 ? { x: 0, y: 0 } : rootScatterPositions[index % rootScatterPositions.length];
-    const ring = Math.floor(index / rootScatterPositions.length);
-    return {
-      topic: rootTopic,
-      x: base.x + (ring * 180),
-      y: base.y + (ring * 130),
-      isActive: activeRoot && String(activeRoot.id) === String(rootTopic.id)
-    };
-  });
-
-  const descendantNodes = [];
-  const links = [];
-
-  const layoutChildren = (parentTopic, parentNode, depth = 1, branchSide = null) => {
-    const children = parentTopic.children || [];
-
-    children.forEach((child, index) => {
-      const side = branchSide || (index % 2 === 0 ? 1 : -1);
-      const sameSideIndex = children.slice(0, index).filter((_, childIndex) => (branchSide || (childIndex % 2 === 0 ? 1 : -1)) === side).length;
-      const sameSideTotal = children.filter((_, childIndex) => (branchSide || (childIndex % 2 === 0 ? 1 : -1)) === side).length;
-      const yOffset = (sameSideIndex - ((sameSideTotal - 1) / 2)) * (depth === 1 ? 290 : 230);
-      const node = {
-        topic: child,
-        x: parentNode.x + (side * (depth === 1 ? 500 : 400)),
-        y: parentNode.y + yOffset,
-        depth,
-        side,
-        isSelected: selectedTopic && String(child.id) === String(selectedTopic.id),
-        isPath: activePath.some((pathTopic) => String(pathTopic.id) === String(child.id))
-      };
-
-      descendantNodes.push(node);
-      links.push({ from: parentNode, to: node });
-      layoutChildren(child, node, depth + 1, side);
-    });
-  };
-
-  rootNodes.forEach((rootNode) => {
-    layoutChildren(rootNode.topic, rootNode);
-  });
-
-  resolveTopicNodeCollisions(rootNodes, descendantNodes);
-
-  return { rootNodes, descendantNodes, links, selectedTopic };
-};
-
 // Synapse View의 실제 Topic/Neuron 지도입니다.
 const TopicTreeGraphComponent = ({ rootTopics, activeTopic, topicNodesById = {}, quizStatusByTopicId = {}, showNeuronDetail, hideNeurons, onMoveToTopic, onOpenNodeDetail }) => {
   const { rootNodes, descendantNodes, links, selectedTopic } = useMemo(
@@ -203,6 +127,7 @@ const TopicTreeGraphComponent = ({ rootTopics, activeTopic, topicNodesById = {},
       const topicNeurons = topicNodesById[String(topicNode.topic.id)] || [];
       const neuronCount = topicNeurons.length;
       const isSelectedTopic = selectedTopic && String(topicNode.topic.id) === String(selectedTopic.id);
+      const isConnectedTopic = Boolean(selectedTopic && topicNode.isPath);
       const isExpanded = isSelectedTopic && showNeuronDetail;
       const perRing = isExpanded ? 7 : 12;
       const topicBlockersExceptSelf = topicBlockers.filter((blocker) => blocker.topicId !== String(topicNode.topic.id));
@@ -231,6 +156,7 @@ const TopicTreeGraphComponent = ({ rootTopics, activeTopic, topicNodesById = {},
           node,
           topicNode,
           isSelectedTopic,
+          isConnectedTopic,
           isExpanded,
           x: position.x,
           y: position.y
@@ -244,18 +170,18 @@ const TopicTreeGraphComponent = ({ rootTopics, activeTopic, topicNodesById = {},
   if (!rootTopics.length) return null;
 
   return (
-    <div className={`topic-map ${showNeuronDetail ? "is-detail-zoom" : ""}`} aria-label="Topic synapse map">
+    <div className={`topic-map ${showNeuronDetail ? "is-detail-zoom" : ""} ${selectedTopic ? "has-selected-topic" : ""}`} aria-label="Topic synapse map">
       {links.map((link) => (
-        <span className="topic-map-link" key={`${link.from.topic.id}-${link.to.topic.id}`} style={lineStyle(link.from.x, link.from.y, link.to.x, link.to.y)} aria-hidden="true" />
+        <span className={`topic-map-link ${link.isPath ? "is-path" : ""} ${link.isDimmed ? "is-dimmed" : ""}`} key={`${link.from.topic.id}-${link.to.topic.id}`} style={lineStyle(link.from.x, link.from.y, link.to.x, link.to.y)} aria-hidden="true" />
       ))}
 
       {!hideNeurons && positionedNeurons.map((item) => (
-        <span className={`neuron-map-link is-main ${item.isSelectedTopic ? "is-selected-topic" : "is-background"}`} key={`neuron-link-${item.topicNode.topic.id}-${item.node.id}`} style={lineStyle(item.topicNode.x, item.topicNode.y, item.x, item.y)} aria-hidden="true" />
+        <span className={`neuron-map-link is-main ${item.isConnectedTopic ? "is-selected-topic" : "is-background"}`} key={`neuron-link-${item.topicNode.topic.id}-${item.node.id}`} style={lineStyle(item.topicNode.x, item.topicNode.y, item.x, item.y)} aria-hidden="true" />
       ))}
 
       {!hideNeurons && positionedNeurons.map((item) => (
         <button
-          className={`neuron-map-node is-main ${item.isSelectedTopic ? "is-selected-topic" : "is-background"} ${item.isExpanded ? "is-expanded" : ""}`}
+          className={`neuron-map-node is-main ${item.isConnectedTopic ? "is-selected-topic" : "is-background"} ${item.isExpanded ? "is-expanded" : ""}`}
           key={`${item.topicNode.topic.id}-${item.node.id}`}
           type="button"
           style={{ "--node-x": `${item.x}px`, "--node-y": `${item.y}px` }}
@@ -267,7 +193,7 @@ const TopicTreeGraphComponent = ({ rootTopics, activeTopic, topicNodesById = {},
       ))}
 
       {rootNodes.map((node) => (
-        <button className={`topic-map-node is-root ${node.isActive ? "is-active" : ""}`} key={node.topic.id} type="button" style={{ "--node-x": `${node.x}px`, "--node-y": `${node.y}px` }} onClick={(event) => onMoveToTopic(event, node.topic.id)}>
+        <button className={`topic-map-node is-root ${node.isActive ? "is-active" : ""} ${node.isPath ? "is-path" : ""} ${node.isDimmed ? "is-dimmed" : ""}`} key={node.topic.id} type="button" style={{ "--node-x": `${node.x}px`, "--node-y": `${node.y}px`, "--topic-scale": node.scaleHint }} onClick={(event) => onMoveToTopic(event, node.topic.id)}>
           <span className="topic-title">{node.topic.name}</span>
           {quizStatusByTopicId[String(node.topic.id)]?.hasQuiz && (
             <span className="topic-quiz-badge" title={`${quizStatusByTopicId[String(node.topic.id)]?.quizCount || 0}개 퀴즈 생성됨`}>Q</span>
@@ -276,7 +202,7 @@ const TopicTreeGraphComponent = ({ rootTopics, activeTopic, topicNodesById = {},
       ))}
 
       {descendantNodes.map((node) => (
-        <button className={`topic-map-node ${node.depth > 1 ? "is-small" : ""} ${node.isPath ? "is-path" : ""} ${node.isSelected ? "is-selected" : ""}`} key={node.topic.id} type="button" style={{ "--node-x": `${node.x}px`, "--node-y": `${node.y}px` }} onClick={(event) => onMoveToTopic(event, node.topic.id)}>
+        <button className={`topic-map-node ${node.depth > 1 ? "is-small" : ""} ${node.isPath ? "is-path" : ""} ${node.isSelected ? "is-selected" : ""} ${node.isDimmed ? "is-dimmed" : ""}`} key={node.topic.id} type="button" style={{ "--node-x": `${node.x}px`, "--node-y": `${node.y}px` }} onClick={(event) => onMoveToTopic(event, node.topic.id)}>
           <span className="topic-title">{node.topic.name}</span>
           {quizStatusByTopicId[String(node.topic.id)]?.hasQuiz && (
             <span className="topic-quiz-badge" title={`${quizStatusByTopicId[String(node.topic.id)]?.quizCount || 0}개 퀴즈 생성됨`}>Q</span>
@@ -667,7 +593,7 @@ export default function Workspace({
           <>
             {/* CSS 변수로 pan/zoom/tilt 값을 내려서 Prezi식 이동을 표현합니다. */}
             <div className="graph-viewport" style={{ "--pan-x": `${graph.x}px`, "--pan-y": `${graph.y}px`, "--zoom": graph.scale, "--tilt": `${graph.tilt || 0}deg` }}>
-              <TopicTreeGraph rootTopics={visibleRootTopics} activeTopic={activeTopic} topicNodesById={pageData.topicNodesById || {}} quizStatusByTopicId={pageData.quizStatusByTopicId || {}} showNeuronDetail={Number(graph.scale || 1) >= 0.88} hideNeurons={hideGraphNeurons} onMoveToTopic={onMoveToTopic} onOpenNodeDetail={onOpenNodeDetail} />
+              <TopicTreeGraph rootTopics={visibleRootTopics} activeTopic={activeTopic} topicNodesById={pageData.topicNodesById || {}} quizStatusByTopicId={pageData.quizStatusByTopicId || {}} showNeuronDetail={Number(graph.scale || 1) >= 0.5} hideNeurons={hideGraphNeurons} onMoveToTopic={onMoveToTopic} onOpenNodeDetail={onOpenNodeDetail} />
             </div>
             <button
               className={`neuron-visibility-toggle ${hideGraphNeurons ? "is-hidden-mode" : ""}`}

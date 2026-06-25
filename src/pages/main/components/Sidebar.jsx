@@ -11,6 +11,20 @@ const collectTopicIds = (topics = []) => topics.flatMap((topic) => [
   ...collectTopicIds(topic.children || [])
 ]);
 
+const normalizeSearchText = (value) => String(value || "").trim().toLowerCase();
+
+const filterTopicTree = (topics = [], keyword = "") => {
+  const normalizedKeyword = normalizeSearchText(keyword);
+  if (!normalizedKeyword) return topics;
+
+  return topics.reduce((filtered, topic) => {
+    const children = filterTopicTree(topic.children || [], keyword);
+    const isMatch = normalizeSearchText(topic.name).includes(normalizedKeyword);
+    if (isMatch || children.length) filtered.push({ ...topic, children, isSearchMatch: isMatch });
+    return filtered;
+  }, []);
+};
+
 // 왼쪽 패널: Brain 목록, Topic 트리, 사용자 메뉴를 담당합니다.
 export default function Sidebar({
   pageData,
@@ -31,6 +45,9 @@ export default function Sidebar({
   const topicIds = useMemo(() => collectTopicIds(pageData.topics), [pageData.topics]);
   const topicIdsKey = topicIds.join("|");
   const [expandedTopicIds, setExpandedTopicIds] = useState(() => new Set());
+  const [topicSearch, setTopicSearch] = useState("");
+  const isTopicSearching = Boolean(topicSearch.trim());
+  const topicsToRender = useMemo(() => filterTopicTree(pageData.topics, topicSearch), [pageData.topics, topicSearch]);
 
   // Brain/Topic 목록이 바뀌면 기본은 접힌 상태로 시작합니다.
   useEffect(() => {
@@ -53,12 +70,12 @@ export default function Sidebar({
   const renderTopicTree = (topics = [], depth = 0) => topics.map((topic) => {
     const children = topic.children || [];
     const hasChildren = children.length > 0;
-    const isExpanded = expandedTopicIds.has(String(topic.id));
+    const isExpanded = isTopicSearching || expandedTopicIds.has(String(topic.id));
     const isActive = String(topic.id) === String(pageData.activeTopicId);
 
     return (
       <section className="tree-group" key={topic.id} style={{ "--topic-depth": depth }}>
-        <div className={`tree-node ${isActive ? "is-active" : ""}`}>
+        <div className={`tree-node ${isActive ? "is-active" : ""} ${topic.isSearchMatch ? "is-search-match" : ""}`}>
           <button
             className={`tree-toggle ${isExpanded ? "is-expanded" : ""}`}
             type="button"
@@ -140,8 +157,20 @@ export default function Sidebar({
         <div className="topics-header">
           <h2 className="section-heading" id="topics-heading">TOPICS</h2>
         </div>
+        <label className="sidebar-topic-search" htmlFor="sidebar-topic-search">
+          <Icon name="search" />
+          <input
+            id="sidebar-topic-search"
+            type="search"
+            value={topicSearch}
+            onChange={(event) => setTopicSearch(event.target.value)}
+            placeholder="Topic 검색"
+          />
+        </label>
         <div className="topic-tree">
-          {renderTopicTree(pageData.topics)}
+          {topicsToRender.length
+            ? renderTopicTree(topicsToRender)
+            : <p className="sidebar-topic-empty">검색된 Topic이 없습니다.</p>}
         </div>
       </section>
         </>
