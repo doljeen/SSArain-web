@@ -947,9 +947,11 @@ export default function MainPage() {
       const brains = (myBrains?.brains || []).map((brain) => normalizeBrain(brain));
       const routedBrainId = getBrainIdFromRoute(route);
       const isPreviewRoute = isBrainPreviewRoute(route);
-      const selectedBrain = isPreviewRoute
-        ? (routedBrainId ? normalizeBrain({ id: routedBrainId, name: "Brain", isPreview: true }) : null)
-        : (brains.find((brain) => String(brain.id) === String(routedBrainId)) || brains[0] || null);
+      const selectedBrain = routedBrainId
+        ? isPreviewRoute
+          ? normalizeBrain({ id: routedBrainId, name: "Brain", isPreview: true })
+          : brains.find((brain) => String(brain.id) === String(routedBrainId)) || null
+        : null;
 
       let topics = [];
       let catalogTopics = [];
@@ -1110,6 +1112,25 @@ export default function MainPage() {
       const routedBrainId = getBrainIdFromRoute(nextRoute);
       const routedTopicId = getTopicIdFromRoute(nextRoute);
       const routedNodeId = getNodeIdFromRoute(nextRoute);
+      if (nextRoute === "/main") {
+        ++workspaceLoadSeq.current;
+        setPageData((current) => ({
+          ...current,
+          activeBrainId: null,
+          activeTopicId: null,
+          previewBrain: null,
+          topics: [],
+          nodes: [],
+          topicNodesById: {},
+          quizStatusByTopicId: {}
+        }));
+        setTopicCatalog([]);
+        setNodeDetail((current) => current.isOpen ? { isOpen: false, isLoading: false, data: null, status: "", liked: false } : current);
+        setQuizState({ isLoading: false, isGenerating: false, status: "", quizzes: [], answers: {}, submitted: false });
+        setManageMode(false);
+        setGraph(clampGraph({ x: 0, y: 0, scale: MIN_GRAPH_SCALE, tilt: 0 }));
+        return;
+      }
       if (routedNodeId) {
         loadNodeDetail(routedNodeId);
       } else {

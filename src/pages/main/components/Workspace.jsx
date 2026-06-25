@@ -477,6 +477,12 @@ export default function Workspace({
           ))}
         </nav>
         <div className="header-actions">
+          {isBrainPreview && (
+            <button className="header-button workspace-main-return" type="button" onClick={(event) => onRoute(event, "/main")}>
+              <span aria-hidden="true">←</span>
+              메인으로 돌아가기
+            </button>
+          )}
           {canManageWorkspace && (
             <button className={`header-button manage-mode-button ${manageMode ? "is-active" : ""}`} type="button" onClick={onToggleManageMode} aria-pressed={manageMode}>
               <Icon name="settings" />
@@ -524,6 +530,10 @@ export default function Workspace({
 
           <div className="brain-search-summary">
             <div>
+              <button className="brain-search-back" type="button" onClick={(event) => onRoute(event, "/main")}>
+                <span aria-hidden="true">←</span>
+                메인으로 돌아가기
+              </button>
               <p className="panel-kicker">FIND BRAIN</p>
               <h1 id="brain-search-heading">Brain 찾기</h1>
             </div>
@@ -634,6 +644,32 @@ export default function Workspace({
               <button type="button" onClick={() => onZoom(graph.scale * 1.15, window.innerWidth / 2, window.innerHeight / 2)} aria-label="확대">+</button>
             </div>
           </>
+          ) : view === "synapse" && !activeBrain ? (
+          <section className="workspace-home" aria-label="SSArain main home">
+            <div className="workspace-home-card">
+              <span className="workspace-home-icon"><Icon name="synapse" /></span>
+              <p className="panel-kicker">SSARAIN</p>
+              <h1>Brain을 선택해 시작하세요.</h1>
+              <p>왼쪽 목록에서 Brain을 선택하거나, 새 Brain을 만들고 다른 Brain을 찾아 참여할 수 있습니다.</p>
+              <div className="workspace-home-actions">
+                {isAuthenticated && (
+                  <button type="button" onClick={(event) => onRoute(event, "/brains/new")}>
+                    <Icon name="plus" />
+                    Brain 생성
+                  </button>
+                )}
+                <button type="button" onClick={(event) => onRoute(event, "/brains/search")}>
+                  <Icon name="search" />
+                  Brain 찾기
+                </button>
+                {!isAuthenticated && (
+                  <button type="button" onClick={(event) => onRoute(event, "/login")}>
+                    로그인
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
           ) : view === "quiz" && hasActiveTopic ? (
           <section className="quiz-view" aria-label={`${activeTopic.name} 퀴즈`}>
             <div className="quiz-view-header">
