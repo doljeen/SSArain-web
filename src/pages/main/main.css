@@ -171,23 +171,6 @@ button {
   justify-content: space-between;
 }
 
-.api-chip {
-  height: 20px;
-  padding: 0 7px;
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  background: #f1f5f9;
-  color: #94a3b8;
-  font-size: 10px;
-  font-weight: 850;
-}
-
-.api-chip.is-live {
-  background: #dcfce7;
-  color: #16a34a;
-}
-
 /* Sidebar - MY BRAINS: 사용자가 소속된 Brain 목록과 생성/찾기 버튼입니다. */
 .brain-list {
   padding: 18px 20px 16px;

@@ -30,7 +30,6 @@ export default function Sidebar({
   pageData,
   activeBrain,
   activeTopic,
-  apiStatus,
   canManageWorkspace,
   canManageBrain,
   isAuthenticated,
@@ -121,11 +120,10 @@ export default function Sidebar({
         </section>
       ) : (
         <>
-      {/* 사용자의 Brain 목록입니다. WAS 연결 여부도 작은 칩으로 보여줍니다. */}
+      {/* 사용자의 Brain 목록입니다. */}
       <section className="brain-list" aria-labelledby="brains-heading">
         <div className="section-row">
           <h2 className="section-heading" id="brains-heading">MY BRAINS</h2>
-          {apiStatus === "was" && <span className="api-chip is-live">WAS</span>}
         </div>
         {pageData.brains.map((brain) => {
           const isActive = brain.id === pageData.activeBrainId;

@@ -293,6 +293,7 @@ export default function Workspace({
   onFocusPoint,
   onSetGraph,
   onSetView,
+  onSwitchView,
   onFitGraph,
   onZoom,
   onOpenModal,
@@ -486,8 +487,8 @@ export default function Workspace({
             </button>
           )}
           <div className="view-tabs" role="tablist" aria-label="보기 전환">
-            <button className={`view-tab ${view === "synapse" ? "is-active" : ""}`} type="button" role="tab" aria-selected={view === "synapse"} onClick={(event) => { onRoute(event, activeTopic ? buildTopicRoute(activeTopic.id, "synapse") : "/main/synapse"); onSetView("synapse"); }}><Icon name="synapse" /><span>Synapse View</span></button>
-            <button className={`view-tab ${view === "posts" ? "is-active" : ""}`} type="button" role="tab" aria-selected={view === "posts"} onClick={(event) => { onRoute(event, activeTopic ? buildTopicRoute(activeTopic.id, "posts") : "/main/posts"); onSetView("posts"); }}><Icon name="list" /><span>Post List</span></button>
+            <button className={`view-tab ${view === "synapse" ? "is-active" : ""}`} type="button" role="tab" aria-selected={view === "synapse"} onClick={(event) => onSwitchView(event, "synapse")}><Icon name="synapse" /><span>Synapse View</span></button>
+            <button className={`view-tab ${view === "posts" ? "is-active" : ""}`} type="button" role="tab" aria-selected={view === "posts"} onClick={(event) => onSwitchView(event, "posts")}><Icon name="list" /><span>Post List</span></button>
           </div>
           <button className="header-button" type="button" onClick={(event) => onRoute(event, isAuthenticated ? "/mypage" : "/login")}>{isAuthenticated ? "마이페이지" : "로그인"}</button>
           <button className={`header-button notice-trigger ${isRightPanelOpen ? "is-open" : ""}`} type="button" onClick={onToggleRight} aria-pressed={isRightPanelOpen}><Icon name="bell" /><span>알림창</span></button>
@@ -848,7 +849,7 @@ export default function Workspace({
                     <small>{node.content || "내용이 없습니다."}</small>
                   </span>
                   <span className="post-card-meta">
-                    <span className="post-author"><Icon name="user" />{node.writer || pageData.user.name || "작성자"}</span>
+                    <span className="post-author"><Icon name="user" />{node.writer || "작성자"}</span>
                     {node.createdAt && <span><Icon name="clock" />{formatDate(node.createdAt)}</span>}
                     <span><Icon name="plus" />추천 {node.recommends || 0}</span>
                     <span><Icon name="bell" />댓글 {node.comments || 0}</span>

@@ -21,6 +21,34 @@ const pickBrainRole = (brain) => normalizeRole(
   || brain.role
 );
 
+const pickNodeId = (node) => node.nid ?? node.id ?? node.nodeId;
+const pickNodeWriter = (node) => (
+  node.writer
+  || node.writerName
+  || node.author
+  || node.authorName
+  || node.userName
+  || node.memberName
+  || ""
+);
+const pickNodeCreatedAt = (node) => node.createdAt || node.createdDate || node.regDate || "";
+const pickNodeCommentCount = (node) => (
+  node.commentCount
+  ?? node.commentsCount
+  ?? node.commentCnt
+  ?? node.comments?.length
+  ?? node.comments
+  ?? 0
+);
+const pickNodeRecommendCount = (node) => (
+  node.recommends
+  ?? node.recommendCount
+  ?? node.likeCount
+  ?? node.likes
+  ?? node.likeCnt
+  ?? 0
+);
+
 // WAS Brain DTO(id, name, description, brainRole)를 화면의 Brain 항목으로 정규화합니다.
 export const normalizeBrain = (brain) => ({
   id: String(brain.id ?? brain.bid ?? brain.brainId ?? ""),
@@ -38,13 +66,13 @@ export const normalizeBrain = (brain) => ({
 
 // WAS NodeInfoDto(nid, title, content)를 그래프/Post List에서 쓰는 노드 형태로 정규화합니다.
 export const normalizeNodes = (nodes = []) => nodes.map((node) => ({
-  id: String(node.nid),
+  id: String(pickNodeId(node)),
   title: node.title,
   content: node.content,
-  writer: node.writer || "",
-  createdAt: node.createdAt || "",
-  comments: node.commentCount ?? node.commentsCount ?? node.comments?.length ?? node.comments ?? 0,
-  recommends: node.recommends ?? node.likeCount ?? 0
+  writer: pickNodeWriter(node),
+  createdAt: pickNodeCreatedAt(node),
+  comments: pickNodeCommentCount(node),
+  recommends: pickNodeRecommendCount(node)
 }));
 
 const DELETED_COMMENT_MESSAGES = new Set([
@@ -96,14 +124,14 @@ export const normalizeComments = (comments = []) => {
 };
 
 export const normalizeNodeDetail = (node = {}) => ({
-  id: String(node.nid),
+  id: String(pickNodeId(node)),
   title: node.title || "",
   content: node.content || "",
-  writer: node.writer || "작성자",
-  createdAt: node.createdAt || "",
+  writer: pickNodeWriter(node) || "작성자",
+  createdAt: pickNodeCreatedAt(node),
   comments: normalizeComments(node.comments || []),
-  recommends: node.recommends ?? node.likeCount ?? 0,
-  liked: toBoolean(node.liked)
+  recommends: pickNodeRecommendCount(node),
+  liked: toBoolean(node.liked ?? node.isLiked ?? node.recommended)
 });
 
 // WAS Quiz DTO(qid, question, explanation, options)를 화면에서 채점하기 쉬운 형태로 정리합니다.

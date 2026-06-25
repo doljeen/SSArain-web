@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiDelete, apiGet, apiPatch, apiPost, isAuthError } from "../../api/client.js";
 import { endpoints } from "../../api/endpoints.js";
-import { guestPreview } from "../../data/guestPreview.js";
 import { getCurrentRoute, routeTo, ROUTE_EVENTS, syncDocumentRoute } from "../../shared/router/routes.js";
 import BrainManagerPanel from "./components/BrainManagerPanel.jsx";
 import InsightsPanel from "./components/InsightsPanel.jsx";
@@ -17,7 +16,6 @@ import { collectTopicLayoutPoints } from "./config/topicLayout.js";
 // 왼쪽 Sidebar, 중앙 Workspace, 오른쪽 InsightsPanel에 필요한 상태와 API 호출을 이 파일에서 조율합니다.
 
 // 브라우저 저장소에 남겨둘 UI/세션 상태 key입니다.
-const CREATED_WORKSPACE_KEY = "ssarain-created-workspace";
 const AUTH_STATE_KEY = "ssarain-authenticated";
 const QUIZ_GENERATION_COUNTS_KEY = "ssarain-quiz-generation-counts";
 const SIDEBAR_WIDTH_KEY = "ssarain-sidebar-width";
@@ -429,6 +427,7 @@ export default function MainPage() {
   const brainTabState = useRef({});
   const workspaceLoadSeq = useRef(0);
   const shouldFitGraphAfterLoad = useRef(false);
+  const postNodeDetailHydrationKey = useRef("");
 
   // ===== 현재 선택된 Brain/Topic과 권한 계산 =====
   // 트리 구조의 토픽을 펼쳐서 현재 선택된 Brain/Topic을 계산합니다.
@@ -604,13 +603,22 @@ export default function MainPage() {
     }
   };
 
-  // BrainTopic에 연결된 Node 목록을 가져옵니다. 상세 정보는 카드 클릭 시 별도로 불러옵니다.
+  // Post List에서 필요한 작성자/추천 수는 preview 응답에 없어 선택 Topic의 목록만 상세 정보로 보강합니다.
   const fetchTopicNodes = async (brainId, topic) => {
     if (!brainId || !topic?.btid) return [];
 
     try {
       const result = await apiGet(endpoints.nodes.preview(topic.btid));
-      return normalizeNodes(result?.neuronPreviewList || []);
+      const previewNodes = normalizeNodes(result?.neuronPreviewList || []);
+      const detailNodes = await Promise.all(previewNodes.map(async (node) => {
+        try {
+          const detail = normalizeNodeDetail(await apiGet(endpoints.nodes.detail(node.id)));
+          return mergeNodePreviewFromDetail(node, detail);
+        } catch (error) {
+          return node;
+        }
+      }));
+      return detailNodes;
     } catch (error) {
       return [];
     }
@@ -783,6 +791,35 @@ export default function MainPage() {
     handleRouteClick(event, buildTopicRoute(activeBrain?.id, activeTopic.id, "quiz", { preview: isBrainPreview }));
   };
 
+  const mergeNodePreviewFromDetail = (node, detail) => {
+    if (!detail?.id || String(node.id) !== String(detail.id)) return node;
+
+    return {
+      ...node,
+      title: detail.title || node.title,
+      content: detail.content ?? node.content,
+      writer: detail.writer || node.writer,
+      createdAt: detail.createdAt || node.createdAt,
+      recommends: detail.recommends ?? node.recommends,
+      comments: Array.isArray(detail.comments) ? detail.comments.length : node.comments
+    };
+  };
+
+  const syncNodePreviewFromDetail = (detail) => {
+    if (!detail?.id) return;
+
+    setPageData((current) => ({
+      ...current,
+      nodes: (current.nodes || []).map((node) => mergeNodePreviewFromDetail(node, detail)),
+      topicNodesById: Object.fromEntries(
+        Object.entries(current.topicNodesById || {}).map(([topicId, nodes]) => [
+          topicId,
+          nodes.map((node) => mergeNodePreviewFromDetail(node, detail))
+        ])
+      )
+    }));
+  };
+
   const loadNodeDetail = async (nodeId) => {
     if (!nodeId) return;
 
@@ -799,24 +836,7 @@ export default function MainPage() {
       const detail = await apiGet(endpoints.nodes.detail(nodeId));
       const normalizedDetail = normalizeNodeDetail(detail);
       setNodeDetail({ isOpen: true, isLoading: false, data: normalizedDetail, status: "", liked: normalizedDetail.liked });
-      setPageData((current) => ({
-        ...current,
-        nodes: current.nodes.map((node) => (
-          String(node.id) === String(nodeId)
-            ? { ...node, comments: normalizedDetail.comments.length }
-            : node
-        )),
-        topicNodesById: Object.fromEntries(
-          Object.entries(current.topicNodesById || {}).map(([topicId, nodes]) => [
-            topicId,
-            nodes.map((node) => (
-              String(node.id) === String(nodeId)
-                ? { ...node, comments: normalizedDetail.comments.length }
-                : node
-            ))
-          ])
-        )
-      }));
+      syncNodePreviewFromDetail(normalizedDetail);
       setCommentDraft({ content: "", status: "", isSubmitting: false, parentId: null, editingId: null });
     } catch (error) {
       setNodeDetail((current) => ({
@@ -903,11 +923,7 @@ export default function MainPage() {
       setAuthStatus("guest");
       setApiStatus("guest");
       setPageData((current) => ({
-        ...current,
-        ...guestPreview,
-        previewBrain: null,
-        topicNodesById: {},
-        quizStatusByTopicId: {},
+        ...emptyPageData,
         user: { name: "Guest", email: "", role: "GUEST" }
       }));
       return;
@@ -1001,11 +1017,7 @@ export default function MainPage() {
         setAuthStatus("guest");
         setApiStatus("guest");
         setPageData((current) => ({
-          ...current,
-          ...guestPreview,
-          previewBrain: null,
-          topicNodesById: {},
-          quizStatusByTopicId: {},
+          ...emptyPageData,
           user: { name: "Guest", email: "", role: "GUEST" }
         }));
         return;
@@ -1075,22 +1087,6 @@ export default function MainPage() {
     syncDocumentRoute(route);
     setView(getViewFromRoute(route));
 
-    const createdWorkspace = window.sessionStorage.getItem(CREATED_WORKSPACE_KEY);
-    if (createdWorkspace) {
-      try {
-        const parsedWorkspace = JSON.parse(createdWorkspace);
-        const routedTopicId = getTopicIdFromRoute(route);
-        setPageData((current) => ({
-          ...current,
-          ...parsedWorkspace,
-          user: current.user,
-          activeTopicId: routedTopicId || parsedWorkspace.activeTopicId
-        }));
-      } catch (error) {
-        window.sessionStorage.removeItem(CREATED_WORKSPACE_KEY);
-      }
-    }
-
     loadMainData();
     if (isBrainSearchRoute(route)) {
       searchBrains("", 0);
@@ -1149,6 +1145,25 @@ export default function MainPage() {
       loadTopicQuizzes(activeTopic);
     }
   }, [view, activeTopic?.id, activeTopic?.btid]);
+
+  // Synapse에서 Post List로 전환할 때 preview 캐시만 남아 있으면 작성자/추천 수를 상세 정보로 보강합니다.
+  useEffect(() => {
+    if (view !== "posts" || !activeBrain?.id || !activeTopic?.btid || nodeDetail.isOpen) return;
+    const needsDetailHydration = (pageData.nodes || []).some((node) => !node.writer);
+    if (!needsDetailHydration) return;
+
+    const hydrationKey = `${activeBrain.id}:${activeTopic.id}:${(pageData.nodes || []).map((node) => node.id).join(",")}`;
+    if (postNodeDetailHydrationKey.current === hydrationKey) return;
+    postNodeDetailHydrationKey.current = hydrationKey;
+
+    fetchTopicNodes(activeBrain.id, activeTopic).then((nodes) => {
+      setPageData((current) => String(current.activeTopicId) === String(activeTopic.id) ? {
+        ...current,
+        nodes,
+        topicNodesById: { ...(current.topicNodesById || {}), [String(activeTopic.id)]: nodes }
+      } : current);
+    });
+  }, [view, activeBrain?.id, activeTopic?.id, activeTopic?.btid, nodeDetail.isOpen, pageData.nodes]);
 
   // Topic 트리가 깊을 때 왼쪽 사이드바 폭을 사용자가 직접 조절할 수 있게 합니다.
   useEffect(() => {
@@ -1629,6 +1644,37 @@ export default function MainPage() {
     handleRouteClick(event, nextRoute);
   };
 
+  const switchWorkspaceView = (event, nextView) => {
+    if (nextView === "posts") {
+      const nextRoute = activeTopic
+        ? buildTopicRoute(activeBrain?.id, activeTopic.id, "posts", { preview: isBrainPreview })
+        : "/main/posts";
+
+      setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
+      setView("posts");
+      handleRouteClick(event, nextRoute);
+
+      if (activeBrain && activeTopic?.btid) {
+        fetchTopicNodes(activeBrain.id, activeTopic).then((nodes) => {
+          setPageData((current) => String(current.activeTopicId) === String(activeTopic.id) ? {
+            ...current,
+            nodes,
+            topicNodesById: { ...(current.topicNodesById || {}), [String(activeTopic.id)]: nodes }
+          } : current);
+        });
+      }
+      return;
+    }
+
+    const nextRoute = activeTopic
+      ? buildTopicRoute(activeBrain?.id, activeTopic.id, "synapse", { preview: isBrainPreview })
+      : (activeBrain?.id ? `/brains/${activeBrain.id}${isBrainPreview ? "/preview" : ""}` : "/main/synapse");
+
+    setNodeDetail({ isOpen: false, isLoading: false, data: null, status: "", liked: false });
+    setView("synapse");
+    handleRouteClick(event, nextRoute);
+  };
+
   const deleteNode = async () => {
     const nodeId = nodeDetail.data?.id;
     if (!nodeId) return;
@@ -1675,7 +1721,13 @@ export default function MainPage() {
 
     try {
       const result = await apiPost(endpoints.nodes.like(nodeId), {});
-      const nextLikeCount = result?.likeCount ?? nodeDetail.data.recommends ?? 0;
+      const nextLikeCount = result?.likeCount
+        ?? result?.recommends
+        ?? result?.recommendCount
+        ?? result?.likes
+        ?? result?.likeCnt
+        ?? nodeDetail.data.recommends
+        ?? 0;
       const nextLiked = result?.liked ?? !nodeDetail.liked;
 
       setNodeDetail((current) => {
@@ -2518,9 +2570,7 @@ export default function MainPage() {
     setAuthStatus("guest");
     setApiStatus("guest");
     setPageData((current) => ({
-      ...current,
-      ...guestPreview,
-      previewBrain: null,
+      ...emptyPageData,
       user: { name: "Guest", email: "", role: "GUEST" }
     }));
     routeTo("/main");
@@ -2533,7 +2583,6 @@ export default function MainPage() {
       <Sidebar
         activeBrain={activeBrain}
         activeTopic={activeTopic}
-        apiStatus={apiStatus}
         canManageBrain={canManageBrain}
         canManageWorkspace={canManageWorkspace}
         isAuthenticated={isAuthenticated}
@@ -2584,6 +2633,7 @@ export default function MainPage() {
         onRoute={handleRouteClick}
         onSetGraph={setGraph}
         onSetView={setView}
+        onSwitchView={switchWorkspaceView}
         onFitGraph={fitGraphToTopics}
         nodeDetail={nodeDetail}
         quizState={quizState}

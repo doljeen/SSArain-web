@@ -4,8 +4,6 @@ import { endpoints } from "../../api/endpoints.js";
 import Icon from "../../shared/icons/Icon.jsx";
 import { routeTo } from "../../shared/router/routes.js";
 
-const STORAGE_KEY = "ssarain-created-workspace";
-
 const normalizeBrainUser = (user) => ({
   // WAS의 BrainUserInfoDto는 UUID라는 대문자 JSON 키를 내려줍니다.
   id: String(user?.UUID || user?.uuid || user?.uid || user?.id || ""),
@@ -183,32 +181,13 @@ export default function BrainCreatePage() {
         inviteResult = { addedCount: 0, failedKeywords: members.map((member) => member.email || member.name) };
       }
 
-      const workspace = {
-        activeBrainId: brainId,
-        activeTopicId: null,
-        brains: [{
-          id: brainId,
-          name: created?.name || payload.name,
-          description: created?.description || payload.description,
-          joinPolicy: payload.joinPolicy,
-          owner: "나",
-          members: 1 + inviteResult.addedCount,
-          topicsCount: Array.isArray(created?.topics) ? created.topics.length : 0
-        }],
-        topics: [],
-        nodes: [],
-        notifications: [],
-        activities: []
-      };
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
-
       if (inviteResult.failedKeywords.length) {
         setStatus(`Brain 생성 완료 · 추가 실패: ${inviteResult.failedKeywords.join(", ")}`);
-        window.setTimeout(() => moveTo("/main"), 900);
+        window.setTimeout(() => moveTo(brainId ? `/brains/${brainId}` : "/main"), 900);
         return;
       }
 
-      moveTo("/main");
+      moveTo(brainId ? `/brains/${brainId}` : "/main");
     } catch (error) {
       const message = error.message.includes("인증") || error.message.includes("쿠키")
         ? "Brain 생성은 로그인된 실제 계정으로 가능합니다. 관리자 페이지 확인용 임시 로그인은 WAS 인증 토큰이 없습니다."
