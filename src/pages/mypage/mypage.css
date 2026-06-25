@@ -274,7 +274,7 @@
   min-height: 66px;
   padding: 12px 14px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -283,12 +283,17 @@
   text-align: left;
 }
 
+.mypage-activity-item > span:not(.mypage-activity-icon) {
+  min-width: 0;
+}
+
 .mypage-activity-item:hover {
   border-color: #dfe7f2;
   background: #f8fafc;
 }
 
 .mypage-activity-icon {
+  flex: 0 0 40px;
   width: 40px;
   height: 40px;
   display: grid;
@@ -304,9 +309,15 @@
 }
 
 .mypage-activity-item strong {
+  overflow: hidden;
   color: #171c28;
   font-size: 15px;
   font-weight: 860;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .mypage-activity-item small {
@@ -345,6 +356,43 @@
   color: #7b8798;
   font-size: 13px;
   font-weight: 740;
+}
+
+.mypage-pagination {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.mypage-pagination button {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: var(--color-purple-strong);
+  font-size: 13px;
+  font-weight: 860;
+}
+
+.mypage-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.mypage-pagination span {
+  min-width: 72px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e3eaf6;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 860;
 }
 
 .password-panel,

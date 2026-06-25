@@ -6,6 +6,7 @@ import Icon from "../../shared/icons/Icon.jsx";
 import { routeTo } from "../../shared/router/routes.js";
 
 const AUTH_STATE_KEY = "ssarain-authenticated";
+const ACTIVITY_PAGE_SIZE = 10;
 
 const activitySections = [
   {
@@ -36,7 +37,10 @@ const initialActivityData = activitySections.reduce((acc, section) => ({
   [section.id]: {
     count: 0,
     items: [],
-    hasLoaded: false
+    hasLoaded: false,
+    currentPage: 0,
+    totalPages: 0,
+    hasNext: false
   }
 }), {});
 
@@ -61,6 +65,16 @@ const formatActivityDate = (value) => {
 };
 
 const getActivityTotal = (page) => Number(page?.totalElements ?? page?.activities?.length ?? 0);
+const getActivityPageMeta = (page, requestedPage = 0) => {
+  const count = getActivityTotal(page);
+  const pageSize = Number(page?.pageSize || ACTIVITY_PAGE_SIZE);
+  return {
+    count,
+    currentPage: Number(page?.currentPage ?? requestedPage),
+    totalPages: Number(page?.totalPages ?? (count > 0 ? Math.ceil(count / pageSize) : 0)),
+    hasNext: Boolean(page?.hasNext)
+  };
+};
 
 const getBrainId = (brain) => String(brain?.id ?? brain?.bid ?? brain?.brainId ?? "");
 
@@ -76,8 +90,8 @@ const getNeuronRoute = (activity, joinedBrainIds = new Set()) => {
   return "/main";
 };
 
-const normalizeNeuronActivities = (page, emptyLabel, metaPrefix = "작성일", joinedBrainIds = new Set()) => ({
-  count: getActivityTotal(page),
+const normalizeNeuronActivities = (page, emptyLabel, metaPrefix = "작성일", joinedBrainIds = new Set(), requestedPage = 0) => ({
+  ...getActivityPageMeta(page, requestedPage),
   hasLoaded: true,
   items: (page?.activities || []).map((activity, index) => {
     const dateText = formatActivityDate(activity.createdAt);
@@ -90,8 +104,8 @@ const normalizeNeuronActivities = (page, emptyLabel, metaPrefix = "작성일", j
   })
 });
 
-const normalizeCommentActivities = (page, joinedBrainIds = new Set()) => ({
-  count: getActivityTotal(page),
+const normalizeCommentActivities = (page, joinedBrainIds = new Set(), requestedPage = 0) => ({
+  ...getActivityPageMeta(page, requestedPage),
   hasLoaded: true,
   items: (page?.activities || []).map((activity, index) => {
     const dateText = formatActivityDate(activity.createdAt);
@@ -121,6 +135,7 @@ export default function MyPage() {
   const [activityData, setActivityData] = useState(initialActivityData);
   const [activityStatus, setActivityStatus] = useState("");
   const [isActivityLoading, setIsActivityLoading] = useState(false);
+  const [joinedBrainIds, setJoinedBrainIds] = useState(() => new Set());
 
   const moveTo = (path) => {
     routeTo(path);
@@ -141,6 +156,48 @@ export default function MyPage() {
   const displayEmail = user?.email || "계정 정보를 확인하고 있습니다.";
   const displayRole = user ? roleLabel(user.role) : "확인 중";
 
+  const fetchActivitySection = async (sectionId, page = 0, brainIds = joinedBrainIds) => {
+    if (!sectionId) return null;
+
+    const endpointBySection = {
+      nodes: endpoints.users.activities.neurons,
+      comments: endpoints.users.activities.comments,
+      thumbs: endpoints.users.activities.likedNeurons
+    };
+    const endpoint = endpointBySection[sectionId];
+    if (!endpoint) return null;
+
+    const result = await apiGet(endpoint(page, ACTIVITY_PAGE_SIZE));
+    if (sectionId === "comments") return normalizeCommentActivities(result, brainIds, page);
+    if (sectionId === "thumbs") return normalizeNeuronActivities(result, "제목 없는 Neuron", "추천한 Neuron", brainIds, page);
+    return normalizeNeuronActivities(result, "제목 없는 Neuron", "작성일", brainIds, page);
+  };
+
+  const loadActivityPage = async (sectionId, page = 0) => {
+    setIsActivityLoading(true);
+    setActivityStatus("");
+
+    try {
+      const nextSection = await fetchActivitySection(sectionId, page);
+      if (!nextSection) return;
+      setActivityData((current) => ({
+        ...current,
+        [sectionId]: nextSection
+      }));
+    } catch (error) {
+      setActivityStatus(`활동 목록을 불러오지 못했습니다 · ${error.message}`);
+    } finally {
+      setIsActivityLoading(false);
+    }
+  };
+
+  const selectActivityTab = (sectionId) => {
+    setActiveActivity(sectionId);
+    if (!activityData[sectionId]?.hasLoaded) {
+      loadActivityPage(sectionId, 0);
+    }
+  };
+
   // WAS 로그아웃 후 인증 상태를 지우고 게스트 메인으로 이동합니다.
   const logout = async () => {
     setIsLoading(true);
@@ -159,25 +216,25 @@ export default function MyPage() {
 
   // 마이페이지 진입 시 로그인된 사용자의 정보를 조회합니다.
   useEffect(() => {
-    const loadActivities = async (joinedBrainIds = new Set()) => {
+    const loadActivities = async (brainIds = new Set()) => {
       setIsActivityLoading(true);
       setActivityStatus("");
 
       const [neuronsResult, commentsResult, likedResult] = await Promise.allSettled([
-        apiGet(endpoints.users.activities.neurons(0, 10)),
-        apiGet(endpoints.users.activities.comments(0, 10)),
-        apiGet(endpoints.users.activities.likedNeurons(0, 10))
+        fetchActivitySection("nodes", 0, brainIds),
+        fetchActivitySection("comments", 0, brainIds),
+        fetchActivitySection("thumbs", 0, brainIds)
       ]);
 
       setActivityData({
         nodes: neuronsResult.status === "fulfilled"
-          ? normalizeNeuronActivities(neuronsResult.value, "제목 없는 Neuron", "작성일", joinedBrainIds)
+          ? neuronsResult.value
           : { ...initialActivityData.nodes, hasLoaded: true },
         comments: commentsResult.status === "fulfilled"
-          ? normalizeCommentActivities(commentsResult.value, joinedBrainIds)
+          ? commentsResult.value
           : { ...initialActivityData.comments, hasLoaded: true },
         thumbs: likedResult.status === "fulfilled"
-          ? normalizeNeuronActivities(likedResult.value, "제목 없는 Neuron", "추천한 Neuron", joinedBrainIds)
+          ? likedResult.value
           : { ...initialActivityData.thumbs, hasLoaded: true }
       });
 
@@ -201,8 +258,9 @@ export default function MyPage() {
           sessionStorage.setItem(AUTH_STATE_KEY, "true");
           setUser(normalizeUserInfo(userInfo));
         }
-        const joinedBrainIds = new Set((myBrains?.brains || []).map(getBrainId).filter(Boolean));
-        loadActivities(joinedBrainIds);
+        const nextJoinedBrainIds = new Set((myBrains?.brains || []).map(getBrainId).filter(Boolean));
+        setJoinedBrainIds(nextJoinedBrainIds);
+        loadActivities(nextJoinedBrainIds);
       } catch (error) {
         if (isAuthError(error)) {
           sessionStorage.removeItem(AUTH_STATE_KEY);
@@ -305,7 +363,7 @@ export default function MyPage() {
                     type="button"
                     role="tab"
                     aria-selected={section.id === activeActivity}
-                    onClick={() => setActiveActivity(section.id)}
+                    onClick={() => selectActivityTab(section.id)}
                   >
                     {section.title}
                   </button>
@@ -315,7 +373,7 @@ export default function MyPage() {
 
             <div className="activity-summary-row">
               {resolvedActivitySections.map((section) => (
-                <button key={section.id} className={`activity-summary-card ${section.id === activeActivity ? "is-active" : ""}`} type="button" onClick={() => setActiveActivity(section.id)}>
+                <button key={section.id} className={`activity-summary-card ${section.id === activeActivity ? "is-active" : ""}`} type="button" onClick={() => selectActivityTab(section.id)}>
                   <span><Icon name={section.icon} /></span>
                   <strong>{section.count}</strong>
                   <small>{section.title}</small>
@@ -346,6 +404,29 @@ export default function MyPage() {
                 </div>
               )}
             </div>
+            {selectedActivity.count > ACTIVITY_PAGE_SIZE && (
+              <div className="mypage-pagination" aria-label={`${selectedActivity.title} 페이지 이동`}>
+                <button
+                  type="button"
+                  disabled={isActivityLoading || (activityData[activeActivity]?.currentPage || 0) <= 0}
+                  onClick={() => loadActivityPage(activeActivity, Math.max(0, (activityData[activeActivity]?.currentPage || 0) - 1))}
+                >
+                  이전
+                </button>
+                <span>
+                  {(activityData[activeActivity]?.currentPage || 0) + 1}
+                  {" / "}
+                  {Math.max(1, activityData[activeActivity]?.totalPages || 1)}
+                </span>
+                <button
+                  type="button"
+                  disabled={isActivityLoading || !activityData[activeActivity]?.hasNext}
+                  onClick={() => loadActivityPage(activeActivity, (activityData[activeActivity]?.currentPage || 0) + 1)}
+                >
+                  다음
+                </button>
+              </div>
+            )}
           </section>
 
           {/* 비밀번호 변경 기능이 들어갈 위치입니다. 현재는 WAS 엔드포인트 대기 상태입니다. */}
