@@ -367,7 +367,7 @@ export default function MainPage() {
 
   // 현재 route와 좌우 패널, 보기 모드, 그래프 카메라 상태를 관리합니다.
   const [route, setRoute] = useState(getCurrentRoute);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const savedWidth = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
     return Number.isFinite(savedWidth) ? clamp(savedWidth, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH) : MIN_SIDEBAR_WIDTH;
